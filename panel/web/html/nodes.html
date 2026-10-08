@@ -1,0 +1,357 @@
+{{ template "page/head_start" .}}
+<style>
+  .node-stat-card {
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+    background: #fafafa;
+    border: 1px solid #e8e8e8;
+    transition: all 0.3s;
+  }
+  body.dark .node-stat-card {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  .node-stat-title {
+    font-size: 13px;
+    color: #8c8c8c;
+    margin-bottom: 6px;
+  }
+  .node-stat-value {
+    font-size: 24px;
+    font-weight: 700;
+  }
+  .node-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .node-name {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .node-quick-cmd {
+    background: #111827;
+    color: #10b981;
+    padding: 12px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 13px;
+    word-break: break-all;
+    user-select: all;
+    margin: 12px 0;
+  }
+</style>
+{{ template "page/head_end" .}}
+{{ template "page/body_start" .}}
+
+<a-layout id="app" v-cloak :class="themeSwitcher.currentTheme + ' nodes-page'">
+  <wdtt-sidebar></wdtt-sidebar>
+  <a-layout id="content-layout">
+    <a-layout-content>
+      <a-spin :spinning="loading" tip="Загрузка нод..." size="large">
+        <a-row :gutter="[16, 16]">
+          <a-col :span="24">
+            <a-card hoverable>
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <div>
+                  <h2 style="margin:0; font-weight:700;">🌐 Кластер VPS-нод (Мультисервер)</h2>
+                  <div class="text-muted" style="margin-top:4px;">
+                    Подключайте удалённые серверы и генерируйте конфигурации с разных локаций через единую панель
+                  </div>
+                </div>
+                <a-space>
+                  <a-button icon="reload" @click="fetchNodes" :loading="loading">Обновить</a-button>
+                  <a-button type="primary" icon="plus" @click="openAddModal">Добавить ноду</a-button>
+                </a-space>
+              </div>
+            </a-card>
+          </a-col>
+
+          <!-- Статистика кластера -->
+          <a-col :xs="24" :sm="12" :md="6">
+            <div class="node-stat-card">
+              <div class="node-stat-title">Всего нод в кластере</div>
+              <div class="node-stat-value">[[ nodes.length ]]</div>
+            </div>
+          </a-col>
+          <a-col :xs="24" :sm="12" :md="6">
+            <div class="node-stat-card">
+              <div class="node-stat-title">Активных серверов</div>
+              <div class="node-stat-value" style="color: #10b981;">[[ onlineNodesCount ]]</div>
+            </div>
+          </a-col>
+          <a-col :xs="24" :sm="12" :md="6">
+            <div class="node-stat-card">
+              <div class="node-stat-title">Сессий на нодах</div>
+              <div class="node-stat-value" style="color: #3b82f6;">[[ totalOnlineUsers ]]</div>
+            </div>
+          </a-col>
+          <a-col :xs="24" :sm="12" :md="6">
+            <div class="node-stat-card">
+              <div class="node-stat-title">Трафик через кластер</div>
+              <div class="node-stat-value">[[ formatBytes(totalTraffic) ]]</div>
+            </div>
+          </a-col>
+
+          <!-- Таблица нод -->
+          <a-col :span="24">
+            <a-card title="Список серверов" hoverable>
+              <a-table :columns="columns" :data-source="nodes" :row-key="r => r.id" :pagination="false" size="middle">
+                <!-- Название -->
+                <template slot="name" slot-scope="text, row">
+                  <div style="font-weight:600;">
+                    [[ text ]]
+                    <a-tag v-if="row.is_local" color="purple" style="margin-left:6px;">Мастер (Панель)</a-tag>
+                  </div>
+                  <div class="text-muted" style="font-size:12px;">ID: [[ row.id ]]</div>
+                </template>
+
+                <!-- Статус -->
+                <template slot="status" slot-scope="text, row">
+                  <a-tag :color="row.status === 'online' ? 'green' : 'red'">
+                    <a-badge :status="row.status === 'online' ? 'processing' : 'error'" style="margin-right:4px;" />
+                    [[ row.status === 'online' ? 'Online' : 'Offline' ]]
+                  </a-tag>
+                  <span v-if="row.latency" style="font-size:12px; margin-left:4px;" class="text-muted">
+                    ([[ row.latency ]] ms)
+                  </span>
+                </template>
+
+                <!-- Хост и порты -->
+                <template slot="endpoints" slot-scope="_, row">
+                  <div><code>[[ row.host || serverIP ]]</code></div>
+                  <div style="margin-top:4px;">
+                    <a-tag color="blue">UDP [[ row.dtls_port || 56000 ]]</a-tag>
+                    <a-tag color="orange">RAW [[ row.raw_port || 56003 ]]</a-tag>
+                  </div>
+                </template>
+
+                <!-- Онлайн и трафик -->
+                <template slot="traffic" slot-scope="_, row">
+                  <div>Онлайн: <a-tag color="cyan">[[ row.online_users || 0 ]]</a-tag></div>
+                  <div class="text-muted" style="font-size:12px; margin-top:2px;">
+                    ↑ [[ formatBytes(row.traffic_up || 0) ]] · ↓ [[ formatBytes(row.traffic_down || 0) ]]
+                  </div>
+                </template>
+
+                <!-- Действия -->
+                <template slot="actions" slot-scope="_, row">
+                  <a-space>
+                    <a-button size="small" icon="wifi" @click="pingNode(row)" :loading="row.pinging">Ping</a-button>
+                    <a-button v-if="!row.is_local" size="small" icon="code" @click="showInstallCmd(row)">Команда</a-button>
+                    <a-button size="small" icon="edit" @click="openEditModal(row)">Изменить</a-button>
+                    <a-popconfirm v-if="!row.is_local" title="Удалить эту ноду?" ok-text="Да" cancel-text="Отмена" @confirm="deleteNode(row.id)">
+                      <a-button size="small" type="danger" icon="delete">Удалить</a-button>
+                    </a-popconfirm>
+                  </a-space>
+                </template>
+              </a-table>
+            </a-card>
+          </a-col>
+        </a-row>
+      </a-spin>
+    </a-layout-content>
+  </a-layout>
+
+  <!-- Модалка добавления / редактирования ноды -->
+  <a-modal v-model="modal.visible" :title="modal.isEdit ? 'Редактировать ноду' : 'Добавить VPS-ноду'"
+    :confirm-loading="modal.saving" @ok="saveNode" ok-text="Сохранить" cancel-text="Отмена">
+    <a-form layout="vertical">
+      <a-form-item label="Название локации / сервера" required>
+        <a-input v-model.trim="form.name" placeholder="Например: Германия (DE-1)"></a-input>
+      </a-form-item>
+      <a-form-item label="IP-адрес или домен ноды" required>
+        <a-input v-model.trim="form.host" placeholder="123.45.67.89"></a-input>
+      </a-form-item>
+      <a-row :gutter="16">
+        <a-col :span="12">
+          <a-form-item label="UDP DTLS порт" required>
+            <a-input-number v-model="form.dtls_port" :min="1" :max="65535" style="width:100%;"></a-input-number>
+          </a-form-item>
+        </a-col>
+        <a-col :span="12">
+          <a-form-item label="RAW Direct UDP порт" required>
+            <a-input-number v-model="form.raw_port" :min="1" :max="65535" style="width:100%;"></a-input-number>
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <a-form-item v-if="modal.isEdit && !form.is_local" label="Активна">
+        <a-switch v-model="form.is_active"></a-switch>
+      </a-form-item>
+    </a-form>
+  </a-modal>
+
+  <!-- Модалка быстрой команды подключения VPS -->
+  <a-modal v-model="cmdModal.visible" title="Подключение нового VPS сервера" :footer="null" width="650px">
+    <p>Выполните эту команду на новом VPS-сервере под <code>root</code> для автоматического подключения к панели:</p>
+    <div class="node-quick-cmd">[[ cmdModal.cmd ]]</div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
+      <span class="text-muted">Скрипт установит необходимые компоненты и запустит воркер ноды.</span>
+      <a-button type="primary" icon="copy" @click="copyCmd">Скопировать команду</a-button>
+    </div>
+  </a-modal>
+</a-layout>
+
+{{ template "page/body_end" .}}
+
+<script>
+new Vue({
+  el: '#app',
+  data() {
+    return {
+      loading: false,
+      serverIP: '',
+      nodes: [],
+      columns: [
+        { title: 'Сервер / Нода', dataIndex: 'name', scopedSlots: { customRender: 'name' } },
+        { title: 'Статус', dataIndex: 'status', scopedSlots: { customRender: 'status' } },
+        { title: 'Адрес и Порты (UDP/RAW)', scopedSlots: { customRender: 'endpoints' } },
+        { title: 'Нагрузка и Трафик', scopedSlots: { customRender: 'traffic' } },
+        { title: 'Действия', scopedSlots: { customRender: 'actions' }, width: '280px' },
+      ],
+      modal: {
+        visible: false,
+        isEdit: false,
+        saving: false,
+      },
+      form: {
+        id: '',
+        name: '',
+        host: '',
+        dtls_port: 56000,
+        raw_port: 56003,
+        is_active: true,
+        is_local: false,
+      },
+      cmdModal: {
+        visible: false,
+        cmd: '',
+      },
+    };
+  },
+  computed: {
+    onlineNodesCount() {
+      return this.nodes.filter(n => n.status === 'online').length;
+    },
+    totalOnlineUsers() {
+      return this.nodes.reduce((acc, n) => acc + (n.online_users || 0), 0);
+    },
+    totalTraffic() {
+      return this.nodes.reduce((acc, n) => acc + (n.traffic_up || 0) + (n.traffic_down || 0), 0);
+    },
+  },
+  mounted() {
+    this.fetchNodes();
+  },
+  methods: {
+    fetchNodes() {
+      this.loading = true;
+      HttpUtil.get('/panel/api/nodes').then(res => {
+        this.loading = false;
+        if (res.success && res.obj) {
+          this.serverIP = res.obj.server_ip || '';
+          this.nodes = (res.obj.nodes || []).map(n => ({ ...n, pinging: false, latency: null }));
+        }
+      }).catch(err => {
+        this.loading = false;
+        this.$message.error('Ошибка загрузки нод: ' + err);
+      });
+    },
+    openAddModal() {
+      this.modal.isEdit = false;
+      this.form = {
+        id: '',
+        name: '',
+        host: '',
+        dtls_port: 56000,
+        raw_port: 56003,
+        is_active: true,
+        is_local: false,
+      };
+      this.modal.visible = true;
+    },
+    openEditModal(row) {
+      this.modal.isEdit = true;
+      this.form = {
+        id: row.id,
+        name: row.name,
+        host: row.host,
+        dtls_port: row.dtls_port || 56000,
+        raw_port: row.raw_port || 56003,
+        is_active: row.is_active !== false,
+        is_local: row.is_local || false,
+      };
+      this.modal.visible = true;
+    },
+    saveNode() {
+      if (!this.form.name || !this.form.host) {
+        this.$message.warning('Заполните название и адрес ноды');
+        return;
+      }
+      this.modal.saving = true;
+      HttpUtil.post('/panel/api/nodes/save', this.form).then(res => {
+        this.modal.saving = false;
+        if (res.success) {
+          this.$message.success('Нода сохранена');
+          this.modal.visible = false;
+          this.fetchNodes();
+        } else {
+          this.$message.error(res.msg || 'Ошибка сохранения');
+        }
+      }).catch(err => {
+        this.modal.saving = false;
+        this.$message.error('Ошибка: ' + err);
+      });
+    },
+    deleteNode(id) {
+      HttpUtil.post('/panel/api/nodes/delete', { id }).then(res => {
+        if (res.success) {
+          this.$message.success('Нода удалена');
+          this.fetchNodes();
+        } else {
+          this.$message.error(res.msg || 'Ошибка удаления');
+        }
+      });
+    },
+    pingNode(row) {
+      row.pinging = true;
+      HttpUtil.post('/panel/api/nodes/ping', { host: row.host || this.serverIP, port: row.dtls_port }).then(res => {
+        row.pinging = false;
+        if (res.success && res.obj) {
+          row.latency = res.obj.latency_ms;
+          if (res.obj.reachable) {
+            this.$message.success('Нода ' + row.name + ' доступна (' + res.obj.latency_ms + ' ms)');
+            row.status = 'online';
+          } else {
+            this.$message.warning('Пинг отправлен, ожидание ответа (' + (res.obj.error || 'таймаут') + ')');
+          }
+        }
+      }).catch(() => {
+        row.pinging = false;
+        this.$message.error('Ошибка проверки связи');
+      });
+    },
+    showInstallCmd(row) {
+      const loc = window.location;
+      const host = loc.host;
+      this.cmdModal.cmd = 'bash <(curl -fsSL "http://' + host + basePath + 'panel/api/node/install?token=' + (row.api_key || '') + '&id=' + row.id + '")';
+      this.cmdModal.visible = true;
+    },
+    copyCmd() {
+      navigator.clipboard.writeText(this.cmdModal.cmd).then(() => {
+        this.$message.success('Команда скопирована в буфер обмена!');
+      });
+    },
+    formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+    },
+  },
+});
+</script>
+

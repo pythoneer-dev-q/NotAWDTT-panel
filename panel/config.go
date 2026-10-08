@@ -41,6 +41,7 @@ type PanelConfig struct {
 	Port          int    `json:"port"`
 	WebBasePath   string `json:"web_base_path"`
 	SessionKey    string `json:"session_key"`
+	ApiKey        string `json:"apiKey,omitempty"`
 	WebListen     string `json:"webListen,omitempty"`
 	WebDomain     string `json:"webDomain,omitempty"`
 	WebCertFile   string `json:"webCertFile,omitempty"`
@@ -94,6 +95,10 @@ func finalizePanelConfig(cfg *PanelConfig) (*PanelConfig, error) {
 		if err := savePanelConfig(cfg); err != nil {
 			return nil, err
 		}
+	}
+	if cfg.ApiKey == "" {
+		cfg.ApiKey = randomHex(24)
+		_ = savePanelConfig(cfg)
 	}
 	normalizePanelConfig(cfg)
 	syncPanelPollDefaults(cfg)

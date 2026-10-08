@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -214,11 +215,8 @@ func saveDBLocked() error {
 }
 
 func isPasswordExpired(entry *PasswordEntry) bool {
-	if entry == nil {
-		return true
-	}
-	if entry.ExpiresAt == 0 {
-		return false // бессрочный
+	if entry == nil || entry.ExpiresAt <= 0 {
+		return false
 	}
 	return time.Now().Unix() > entry.ExpiresAt
 }
@@ -227,7 +225,7 @@ func isTrafficExceeded(entry *PasswordEntry) bool {
 	if entry == nil || entry.TotalBytes <= 0 {
 		return false
 	}
-	return entry.UpBytes+entry.DownBytes >= entry.TotalBytes
+	return (entry.UpBytes + entry.DownBytes) >= entry.TotalBytes
 }
 
 func passwordForDeviceLocked(deviceID string) string {
@@ -482,12 +480,16 @@ func buildPublicWdttLink(srvIP, ports, password, remark, vkHash string) string {
 func getNextIP() string {
 	used := make(map[string]bool)
 	for _, dev := range db.Devices {
-		used[dev.IP] = true
+		if dev != nil && dev.IP != "" {
+			used[dev.IP] = true
+		}
 	}
-	for i := 2; i <= 250; i++ {
-		ip := fmt.Sprintf("10.66.66.%d", i)
-		if !used[ip] {
-			return ip
+	for subnet := 66; subnet <= 75; subnet++ {
+		for i := 2; i <= 254; i++ {
+			ip := fmt.Sprintf("10.66.%d.%d", subnet, i)
+			if !used[ip] {
+				return ip
+			}
 		}
 	}
 	return ""
@@ -560,30 +562,13 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 		return
 	}
 
-	keys, err := loadOrGenerateKeys(cfg.ConfigDir)
-	if err != nil {
-		log.Fatalf("[WG] Ключи: %v", err)
-	}
+
 
 	enableBBR()
 
-	wgDev, err := startUserspaceWG(keys, cfg.WgPort)
-	if err != nil {
-		log.Fatalf("[WG] Запуск: %v", err)
+	if err := ensureRawTUN(); err != nil {
+		log.Printf("[RAW] TUN init: %v", err)
 	}
-	serverWGDevMu.Lock()
-	serverWGDev = wgDev
-	serverWGDevMu.Unlock()
-	if n := suspendExpiredPasswords(wgDev); n > 0 {
-		log.Printf("[DB] Отключено истёкших паролей при старте (остались в базе): %d", n)
-	}
-	syncPersistedPeersToWG(wgDev)
-	syncAllSpeedLimits()
-	defer func() {
-		resetTcOnIface(wgIfaceName)
-		wgDev.Close()
-		runCmdSilent("ip", "link", "del", wgIfaceName)
-	}()
 
 	clearWGActivity()
 	clearOnlineUsers()
@@ -591,11 +576,10 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 	resetServerStatsCache(cfg.ConfigDir)
 	go statsLoop(ctx, cfg.ConfigDir)
 	go userPresenceLoop(ctx)
-	go expiredPasswordJanitor(ctx, wgDev)
 	go getconfFailJanitor(ctx)
 	go relayFailJanitor(ctx)
-	go botLoop(cfg.BotToken, cfg.AdminID, wgDev)
-	startAdminServer(ctx, wgDev)
+	go botLoop(cfg.BotToken, cfg.AdminID, nil)
+	startAdminServer(ctx, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", cfg.Listen)
 	if err != nil {
@@ -707,9 +691,123 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 		go func(c net.Conn) {
 			defer wg.Done()
 			defer c.Close()
-			handleConn(ctx, c, wgEndpoint, wgDev, keys)
+			handleConn(ctx, c, "", nil, nil)
 		}(dtlsConn)
 	}
 }
 
 // ==================== Обработка соединений ====================
+
+// ApplyNodeSyncPasswords обновляет активные пароли ноды из мастер-панели
+func ApplyNodeSyncPasswords(passwords []string) {
+	dbMutex.Lock()
+	defer dbMutex.Unlock()
+	if db == nil {
+		db = &Database{
+			Passwords: make(map[string]*PasswordEntry),
+			Devices:   make(map[string]*ClientDevice),
+		}
+	}
+	if db.Passwords == nil {
+		db.Passwords = make(map[string]*PasswordEntry)
+	}
+	existing := make(map[string]bool)
+	for _, p := range passwords {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		existing[p] = true
+		if db.Passwords[p] == nil {
+			db.Passwords[p] = &PasswordEntry{
+				Comment: "Cluster User",
+			}
+		} else {
+			db.Passwords[p].IsDeactivated = false
+		}
+	}
+	for p, entry := range db.Passwords {
+		if !existing[p] && entry != nil {
+			entry.IsDeactivated = true
+		}
+	}
+}
+
+// StartNodeSyncWorker запускает фоновую синхронизацию ноды с мастер-панелью
+func StartNodeSyncWorker(ctx context.Context, masterURL, token string) {
+	if masterURL == "" || token == "" {
+		return
+	}
+	masterURL = strings.TrimRight(masterURL, "/")
+	log.Printf("[NODE] Запуск воркера синхронизации с мастером: %s", masterURL)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	var lastUp, lastDown int64
+
+	syncOnce := func() {
+		syncURL := fmt.Sprintf("%s/node/sync?token=%s", masterURL, token)
+		resp, err := client.Get(syncURL)
+		if err != nil {
+			log.Printf("[NODE] Ошибка синхронизации с мастером: %v", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		var data struct {
+			Success bool `json:"success"`
+			Obj     struct {
+				Passwords []string `json:"passwords"`
+				DtlsPort  int      `json:"dtls_port"`
+				RawPort   int      `json:"raw_port"`
+			} `json:"obj"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err == nil && data.Success {
+			ApplyNodeSyncPasswords(data.Obj.Passwords)
+		}
+
+		dbMutex.Lock()
+		onlineUsers := countOnlineUsersLocked()
+		var currentUp, currentDown int64
+		for _, e := range db.Passwords {
+			if e != nil {
+				currentUp += e.UpBytes
+				currentDown += e.DownBytes
+			}
+		}
+		dbMutex.Unlock()
+
+		upDelta := currentUp - lastUp
+		downDelta := currentDown - lastDown
+		if upDelta < 0 {
+			upDelta = 0
+		}
+		if downDelta < 0 {
+			downDelta = 0
+		}
+		lastUp = currentUp
+		lastDown = currentDown
+
+		hbURL := fmt.Sprintf("%s/node/heartbeat?token=%s", masterURL, token)
+		hbBody, _ := json.Marshal(map[string]interface{}{
+			"online_users": onlineUsers,
+			"traffic_up":   upDelta,
+			"traffic_down": downDelta,
+		})
+		_, _ = client.Post(hbURL, "application/json", bytes.NewReader(hbBody))
+	}
+
+	go func() {
+		// Первичная синхронизация
+		syncOnce()
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				syncOnce()
+			}
+		}
+	}()
+}

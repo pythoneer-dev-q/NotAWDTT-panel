@@ -277,6 +277,9 @@ func applyWdttConfigChangeMaybeRestart(restartOnFail bool) error {
 			log.Printf("[panel] in-process restart не удался: %v", restartErr)
 		}
 	}
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return nil
+	}
 	log.Printf("[panel] перезапуск WDTT через systemd")
 	return restartWdttWithDeps()
 }
@@ -297,6 +300,9 @@ func applyWdttMtuRules(action string) {
 
 // restartWdttWithDeps перезапускает WDTT и гарантированно поднимает Xray, если он включён в systemd.
 func restartWdttWithDeps() error {
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return nil
+	}
 	xrayWanted := serviceActive(xrayServiceUnit) || serviceEnabled(xrayServiceUnit)
 	if xrayWanted {
 		markXrayAutoManaged()

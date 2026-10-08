@@ -1,18 +1,30 @@
 package panel
 
-import "sync"
+import (
+	"log"
+	"sync"
+
+	"github.com/ildarmaga/wdtt/pkg/paneldb"
+)
 
 var bootstrapOnce sync.Once
 var bootstrapErr error
 
-// BootstrapDB создаёт panel.db и seed пользователей до старта VPN-сервера.
-// Без этого server.Run() может упасть на [WRAP] нет активных паролей (panel.Run в goroutine).
+// BootstrapDB инициализирует MongoDB и seed данных до старта VPN-сервера.
 func BootstrapDB() error {
 	bootstrapOnce.Do(func() {
-		if err := initPanelDB(); err != nil {
-			bootstrapErr = err
-			return
+		// 1. Инициализируем MongoDB
+		m, err := paneldb.GetDefaultMongo()
+		if err == nil && m != nil {
+			log.Println("[MONGO] Успешное подключение к MongoDB")
+			_ = m.MigrateFromSQLite(panelDBPath)
+		} else {
+			log.Printf("[MONGO] Подключение к MongoDB: %v (продолжаем инициализацию)", err)
 		}
+
+		// 2. Инициализируем локальный слой SQLite для совместимости если доступен
+		_ = initPanelDB()
+
 		ensureLegacySettingsImported()
 		ensureDefaultWdttData()
 	})

@@ -175,59 +175,6 @@ func speedLimitIPsForEntry(entry *PasswordEntry) []string {
 	return ips
 }
 
-func applySpeedLimitForEntryUnlocked(entry *PasswordEntry) {
-	if entry == nil {
-		return
-	}
-	for _, ip := range speedLimitIPsForEntry(entry) {
-		applyClientSpeedLimits(wgIfaceName, ip, entry.MaxDownMBps, entry.MaxUpMBps)
-	}
-}
-
-func applySpeedLimitForPassword(password string) {
-	if password == "" {
-		return
-	}
-	dbMutex.Lock()
-	defer dbMutex.Unlock()
-	entry, ok := db.Passwords[password]
-	if !ok {
-		return
-	}
-	applySpeedLimitForEntryUnlocked(entry)
-}
-
-func syncAllSpeedLimits() {
-	if !tcAvailable() {
-		log.Printf("[TC] tc не найден — установите iproute2 для лимитов скорости")
-		return
-	}
-	dbMutex.Lock()
-	defer dbMutex.Unlock()
-
-	hasLimits := false
-	for _, entry := range db.Passwords {
-		if entry == nil || entry.IsDeactivated {
-			continue
-		}
-		if entry.MaxDownMBps > 0 || entry.MaxUpMBps > 0 {
-			hasLimits = true
-			break
-		}
-	}
-	resetTcOnIface(wgIfaceName)
-	if !hasLimits {
-		return
-	}
-	for _, entry := range db.Passwords {
-		if entry == nil || entry.IsDeactivated {
-			continue
-		}
-		if entry.MaxDownMBps <= 0 && entry.MaxUpMBps <= 0 {
-			continue
-		}
-		for _, ip := range speedLimitIPsForEntry(entry) {
-			applyClientSpeedLimits(wgIfaceName, ip, entry.MaxDownMBps, entry.MaxUpMBps)
-		}
-	}
-}
+func applySpeedLimitForEntryUnlocked(entry *PasswordEntry) {}
+func applySpeedLimitForPassword(password string) {}
+func syncAllSpeedLimits() {}

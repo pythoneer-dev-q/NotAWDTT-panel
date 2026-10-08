@@ -55,6 +55,26 @@ func lookupUserBySubID(subID string) (*subUserInfo, error) {
 	if subID == "" {
 		return nil, fmt.Errorf("empty sub id")
 	}
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if s, err := m.LoadStore(ctx); err == nil && s != nil {
+			for pass, u := range s.Users {
+				if u == nil || u.SubID != subID {
+					continue
+				}
+				e := userEntryFromPaneldb(u)
+				if e.IsDeactivated || isPasswordExpired(e) || trafficExceeded(e) {
+					return nil, fmt.Errorf("subscription inactive")
+				}
+				email := strings.TrimSpace(e.Comment)
+				if email == "" {
+					email = pass
+				}
+				return &subUserInfo{Password: pass, Entry: e, Email: email}, nil
+			}
+		}
+	}
 	if !panelDBEnabled() {
 		return nil, fmt.Errorf("database unavailable")
 	}
@@ -284,19 +304,47 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request) {
 	header := fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d",
 		info.Entry.UpBytes, info.Entry.DownBytes, info.Entry.TotalBytes, expireSec)
 
-	if subscriptionWantsHTML(r) {
-		pageLinks, linkTitles, err := buildAllSubscriptionLinks(linkHost, info.Password, info.Email, a.cfg.SubTitle, info.Entry, inbound, subURL)
-		if err != nil || len(pageLinks) == 0 {
-			pageLinks = []string{link}
-			linkTitles = []string{"WDTT JSON"}
+	var allLinks []string
+	var linkTitles []string
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		if nodes, err := m.ListNodes(ctx); err == nil && len(nodes) > 0 {
+			for _, n := range nodes {
+				if !n.IsActive {
+					continue
+				}
+				h := n.Host
+				if h == "" {
+					h = linkHost
+				}
+				nodeInbound := inbound
+				nodeInbound.DtlsPort = n.DtlsPort
+				nodeInbound.RawDirectPort = n.RawPort
+				nodeTitle := n.Name
+				if nodeTitle == "" {
+					nodeTitle = a.cfg.SubTitle
+				}
+				if nl, err := buildWdttShareLink(h, info.Password, info.Email, nodeTitle, "", info.Entry.VkHash, info.Entry, nodeInbound, subURL); err == nil && nl != "" {
+					allLinks = append(allLinks, nl)
+					linkTitles = append(linkTitles, nodeTitle)
+				}
+			}
 		}
-		a.serveSubInfoPage(w, r, subID, info, pageLinks, linkTitles)
+	}
+	if len(allLinks) == 0 {
+		allLinks = []string{link}
+		linkTitles = []string{"WDTT"}
+	}
+
+	if subscriptionWantsHTML(r) {
+		a.serveSubInfoPage(w, r, subID, info, allLinks, linkTitles)
 		return
 	}
 
 	a.applySubHeaders(w, header)
 
-	body := link
+	body := strings.Join(allLinks, "\n")
 	if a.cfg.SubEncrypt {
 		body = base64.StdEncoding.EncodeToString([]byte(body))
 	}

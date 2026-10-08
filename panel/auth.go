@@ -54,12 +54,25 @@ func (a *App) clearSession(w http.ResponseWriter) {
 	a.clearCSRFCookie(w)
 }
 
-func (a *App) parseSession(r *http.Request) *sessionData {
-	c, err := r.Cookie(sessionCookie)
-	if err != nil || c.Value == "" {
+func (a *App) createToken(username string, dur time.Duration) (string, int64) {
+	if dur <= 0 {
+		dur = a.cfg.sessionDuration()
+	}
+	exp := time.Now().Add(dur).Unix()
+	payload := username + "|" + strconv.FormatInt(exp, 10)
+	mac := hmac.New(sha256.New, []byte(a.cfg.SessionKey))
+	mac.Write([]byte(payload))
+	token := base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." +
+		base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return token, exp
+}
+
+func (a *App) validateToken(token string) *sessionData {
+	token = strings.TrimSpace(token)
+	if token == "" || a.cfg == nil {
 		return nil
 	}
-	parts := strings.SplitN(c.Value, ".", 2)
+	parts := strings.SplitN(token, ".", 2)
 	if len(parts) != 2 {
 		return nil
 	}
@@ -81,10 +94,45 @@ func (a *App) parseSession(r *http.Request) *sessionData {
 		return nil
 	}
 	exp, _ := strconv.ParseInt(chunks[1], 10, 64)
-	if time.Now().Unix() > exp {
+	if exp > 0 && time.Now().Unix() > exp {
 		return nil
 	}
 	return &sessionData{User: chunks[0], ExpiresAt: exp}
+}
+
+func (a *App) authFromHeaders(r *http.Request) *sessionData {
+	if a.cfg == nil {
+		return nil
+	}
+	// 1. Authorization: Bearer <token>
+	authHeader := r.Header.Get("Authorization")
+	if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+		token := strings.TrimSpace(authHeader[7:])
+		if a.cfg.ApiKey != "" && token == a.cfg.ApiKey {
+			return &sessionData{User: a.cfg.Username, ExpiresAt: time.Now().Add(365 * 24 * time.Hour).Unix()}
+		}
+		if sess := a.validateToken(token); sess != nil {
+			return sess
+		}
+	}
+	// 2. X-API-Key: <key>
+	if apiKey := strings.TrimSpace(r.Header.Get("X-API-Key")); apiKey != "" {
+		if a.cfg.ApiKey != "" && apiKey == a.cfg.ApiKey {
+			return &sessionData{User: a.cfg.Username, ExpiresAt: time.Now().Add(365 * 24 * time.Hour).Unix()}
+		}
+		if sess := a.validateToken(apiKey); sess != nil {
+			return sess
+		}
+	}
+	return nil
+}
+
+func (a *App) parseSession(r *http.Request) *sessionData {
+	c, err := r.Cookie(sessionCookie)
+	if err != nil || c.Value == "" {
+		return nil
+	}
+	return a.validateToken(c.Value)
 }
 
 func isAjax(r *http.Request) bool {

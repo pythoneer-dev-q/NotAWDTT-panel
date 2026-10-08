@@ -32,77 +32,43 @@
     </a-form-item>
     <a-form-item>
       <template slot="label">
-        <a-tooltip title="UDP порт DTLS — основной вход клиентов">
-          DTLS порт <a-icon type="question-circle"></a-icon>
+        <a-tooltip title="UDP порт DTLS — основной защищённый вход для клиентов">
+          UDP (DTLS) порт <a-icon type="question-circle"></a-icon>
         </a-tooltip>
       </template>
       <a-input-number v-model="inboundForm.dtls_port" :min="1" :max="65535" :style="{ width: '100%' }"></a-input-number>
     </a-form-item>
     <a-form-item>
       <template slot="label">
-        <a-tooltip title="UDP порт WireGuard (userspace), открывается в firewall">
-          WireGuard порт <a-icon type="question-circle"></a-icon>
+        <a-tooltip title="UDP порт прямого RAW-подключения (WRAP AEAD, максимальная производительность)">
+          RAW Direct порт <a-icon type="question-circle"></a-icon>
         </a-tooltip>
       </template>
-      <a-input-number v-model="inboundForm.wg_port" :min="1" :max="65535" :style="{ width: '100%' }"></a-input-number>
+      <a-input-number v-model="inboundForm.raw_direct_port" :min="1" :max="65535" :style="{ width: '100%' }"></a-input-number>
     </a-form-item>
     <a-form-item>
       <template slot="label">
-        <a-tooltip title="Локальный порт WireGuard на устройстве клиента (127.0.0.1)">
-          Порт клиента <a-icon type="question-circle"></a-icon>
-        </a-tooltip>
-      </template>
-      <a-input-number v-model="inboundForm.client_port" :min="1" :max="65535" :style="{ width: '100%' }"></a-input-number>
-    </a-form-item>
-    <a-form-item>
-      <template slot="label">
-        <a-tooltip title="DNS в WG-конфиге клиента (выдаётся при подключении)">
-          DNS клиента <a-icon type="question-circle"></a-icon>
+        <a-tooltip title="DNS серверы, выдаваемые клиентам при подключении">
+          DNS клиентов <a-icon type="question-circle"></a-icon>
         </a-tooltip>
       </template>
       <a-input v-model.trim="inboundForm.dns" placeholder="1.1.1.1"></a-input>
     </a-form-item>
     <a-form-item>
       <template slot="label">
-        <a-tooltip title="MTU в WireGuard-конфиге клиента и на интерфейсе wdtt0 / RAW. Для iOS/TURN обычно 1280">
+        <a-tooltip title="MTU сетевого интерфейса wdtt-raw и пакетов клиентов (обычно 1280 или 1420)">
           MTU <a-icon type="question-circle"></a-icon>
         </a-tooltip>
       </template>
       <a-input-number v-model="inboundForm.mtu" :min="576" :max="1500" :style="{ width: '100%' }"></a-input-number>
     </a-form-item>
-    <a-form-item>
-      <template slot="label">
-        <a-tooltip title="Максимум активных паролей (истёкшие не считаются). Подсеть WG 10.66.66.0/24 — до 249">
-          Лимит пользователей <a-icon type="question-circle"></a-icon>
-        </a-tooltip>
-      </template>
-      <a-input-number v-model="inboundForm.max_users" :min="1" :max="249" :style="{ width: '100%' }"></a-input-number>
-    </a-form-item>
-    <a-divider>RAW (без WireGuard)</a-divider>
-    <a-form-item>
-      <template slot="label">
-        <a-tooltip title="Разрешить клиентам режим RAW: IP поверх WRAP по UDP напрямую к серверу, без WireGuard и без DTLS. Нужен PWDTT Desktop ≥0.3.275">
-          Режим RAW <a-icon type="question-circle"></a-icon>
-        </a-tooltip>
-      </template>
-      <a-switch v-model="inboundForm.raw_enable"></a-switch>
-    </a-form-item>
-    <a-form-item>
-      <template slot="label">
-        <a-tooltip title="UDP порт direct RAW (WRAP AEAD). По умолчанию DTLS+3 (например 56000→56003). Смена перезапускает VPN">
-          RAW UDP порт <a-icon type="question-circle"></a-icon>
-        </a-tooltip>
-      </template>
-      <a-input-number v-model="inboundForm.raw_direct_port" :min="1" :max="65535" :style="{ width: '100%' }"
-        :disabled="inboundForm.raw_enable === false"></a-input-number>
-    </a-form-item>
     <a-form-item label="Подсеть RAW">
       <a-input :value="inboundForm.raw_subnet || '10.70.0.0/16'" disabled></a-input>
     </a-form-item>
-    <a-divider>Расширенные</a-divider>
+    <a-divider>Расширенные параметры</a-divider>
     <a-form-item>
       <template slot="label">
-        <a-tooltip title="Таймаут установки DTLS-сессии (сек). На нестабильном Wi‑Fi можно 45–60">
+        <a-tooltip title="Таймаут установки DTLS-сессии в секундах (по умолчанию 30 сек)">
           DTLS handshake, сек <a-icon type="question-circle"></a-icon>
         </a-tooltip>
       </template>
@@ -110,7 +76,7 @@
     </a-form-item>
     <a-form-item>
       <template slot="label">
-        <a-tooltip title="Через столько секунд без WG-трафика пользователь считается офлайн в панели. WG keepalive ≈25 с — минимум 35. Применяется сразу (hot-reload)">
+        <a-tooltip title="Время неактивности сессии в секундах, после которого клиент считается оффлайн">
           Онлайн-таймаут, сек <a-icon type="question-circle"></a-icon>
         </a-tooltip>
       </template>
@@ -118,31 +84,15 @@
     </a-form-item>
     <a-form-item>
       <template slot="label">
-        <a-tooltip title="WireGuard PersistentKeepalive в конфиге клиента (сек). Обычно 25; на NAT можно 15–30">
-          WG keepalive, сек <a-icon type="question-circle"></a-icon>
-        </a-tooltip>
-      </template>
-      <a-input-number v-model="inboundForm.wg_keepalive_sec" :min="10" :max="120" :style="{ width: '100%' }"></a-input-number>
-    </a-form-item>
-    <a-form-item>
-      <template slot="label">
-        <a-tooltip title="Интервал сбора статистики и записи server.log (сек). Меньше = точнее онлайн, выше нагрузка CPU">
-          Интервал stats, сек <a-icon type="question-circle"></a-icon>
+        <a-tooltip title="Интервал обновления статистики нагрузки и трафика (сек)">
+          Интервал статистики, сек <a-icon type="question-circle"></a-icon>
         </a-tooltip>
       </template>
       <a-input-number v-model="inboundForm.stats_interval_sec" :min="2" :max="60" :style="{ width: '100%' }"></a-input-number>
     </a-form-item>
     <a-form-item>
       <template slot="label">
-        <a-tooltip title="Макс. одновременных DTLS-прокси на одно устройство (GETCONF и без GETCONF). 0 = без лимита. Применяется сразу после «Сохранить» (hot-reload)">
-          DTLS на device <a-icon type="question-circle"></a-icon>
-        </a-tooltip>
-      </template>
-      <a-input-number v-model="inboundForm.max_dtls_per_device" :min="0" :max="50" :style="{ width: '100%' }"></a-input-number>
-    </a-form-item>
-    <a-form-item>
-      <template slot="label">
-        <a-tooltip title="HTTP admin на localhost: /health, POST /admin/reload (hot-reload), POST /admin/restart (перезапуск VPN внутри процесса). Порт меняется через «Сохранить» в Подключениях">
+        <a-tooltip title="Адрес локального API управления сервером (по умолчанию 127.0.0.1:2861)">
           Admin HTTP <a-icon type="question-circle"></a-icon>
         </a-tooltip>
       </template>

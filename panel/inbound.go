@@ -23,9 +23,9 @@ const (
 	defaultWgPort       = 56001
 	defaultClientPort   = 9000
 	defaultClientDNS    = "1.1.1.1"
-	defaultMaxUsers     = 10
+	defaultMaxUsers     = 1000
 	defaultWgMTU        = 1280
-	maxUsersSubnetLimit = 249
+	maxUsersSubnetLimit = 5000
 	defaultOnlineTimeoutSec = 15
 	defaultWgKeepaliveSec    = 25
 	defaultStatsIntervalSec  = 2

@@ -1,289 +1,397 @@
-# WDTT Panel API
+# WDTT RESTful API v2 (Remnawave-style)
 
-Базовый URL панели: `https://<IP>:2860/wdtt/` (порт и путь настраиваются в `panel.db`; при включённом SSL HTTP автоматически редиректит на HTTPS).
-
-Все эндпоинты ниже — относительно `https://<IP>:2860/wdtt/`.
-
-## Аутентификация
-
-1. **Логин:** `POST /login`  
-   Тело (form или JSON, как в UI): `username`, `password`  
-   При успехе устанавливается cookie `wdtt-panel`.
-
-2. **Дальнейшие запросы:** cookie `wdtt-panel` обязателен (сессия).
-
-3. **Выход:** `POST /logout/`
-
-Пример с curl (после логина cookie в файле):
-
-```bash
-BASE="https://127.0.0.1:2860/wdtt"
-curl -c /tmp/wdtt.cookie -X POST "$BASE/login" \
-  -d "username=admin&password=wdtt"
-
-curl -b /tmp/wdtt.cookie "$BASE/panel/api/status"
-```
-
-## Формат ответов
-
-Успех:
-
-```json
-{ "success": true, "obj": { ... } }
-```
-
-Ошибка:
-
-```json
-{ "success": false, "msg": "описание ошибки" }
-```
+Полное руководство по программному управлению панелью WDTT. API спроектирован по аналогии с Remnawave / Marzban: поддерживает аутентификацию по токенам и API-ключам, не требует cookies/CSRF, обеспечивает гибкий поиск, управление статусами, лимитами трафика и сроками действия, а также работу с кластерными нодами.
 
 ---
 
-## Статус и мониторинг
+## 1. Базовый URL и маршрутизация
 
-### `GET /panel/api/status`
+Панель доступна по порту `:2860` (или настроенному в панели).  
+Эндпоинты REST API зарегистрированы как в корневом пути `/api/`, так и с учётом базового пути панели `/wdtt/api/`:
 
-Сводка: сервисы, IP, статистика WDTT.
-
-**Ответ `obj`:**
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `wdtt_active` | bool | `wdtt.service` запущен |
-| `xray_active` | bool | `wdtt-xray.service` запущен |
-| `wdtt_iface` | string | Адрес `wdtt0` |
-| `server_ip` | string | Публичный IP |
-| `main_password` | string | Главный пароль VPN |
-| `users_count` | int | Число пользователей в БД |
-| `stats` | object | `server.log` — онлайн, трафик, uptime |
+- `https://<SERVER_HOST>:2860/api/...`
+- `https://<SERVER_HOST>:2860/wdtt/api/...`
 
 ---
 
-## Подключения (WDTT Inbound)
+## 2. Аутентификация
 
-### `GET /panel/api/inbound`
+API поддерживает **два независимых метода** передачи учётных данных в HTTP-заголовках:
 
-Текущие настройки входа + статус.
+### Вариант А: Статический API-ключ администратора (Рекомендуется для ботов и скриптов)
+Передаётся в заголовке `X-API-Key` при каждом запросе:
+```http
+X-API-Key: YOUR_ADMIN_API_KEY
+```
+> **Где взять ключ?** Ключ генерируется автоматически при первом запуске (24 байта hex) и отображается в веб-интерфейсе панели во всплывающем окне **«REST API»** или в файле конфигурации `/etc/wdtt/panel.db` (`panel_config.api_key`).
 
-**Ответ `obj`:** `tag`, `remark`, `listen_host`, `server_host`, `dtls_port`, `wg_port`, `client_port`, `dns`, `max_users`, `service_active`, `iface_up`, `dtls_listening`, `wg_listening`, `active_users`, `online_users`, `xray_active`, …
+### Вариант Б: JWT / Bearer Token
+Передаётся в заголовке `Authorization`:
+```http
+Authorization: Bearer YOUR_AUTH_TOKEN
+```
+Токен получается через эндпоинт `POST /api/auth/token` по логину и паролю администратора.
 
-### `POST /panel/api/inbound/save`
+> ℹ️ **CSRF-токены не требуются:** При наличии заголовков `X-API-Key` или `Authorization: Bearer ...` валидация CSRF и проверка сессионных cookies автоматически отключаются.
 
-Сохранить inbound и перезапустить WDTT (+ Xray при необходимости).
+---
 
-**Тело:**
+## 3. Формат ответов
 
+### Успешный ответ (HTTP 200 / 201)
 ```json
 {
-  "tag": "wdtt-in",
-  "remark": "WDTT",
-  "listen_host": "0.0.0.0",
-  "server_host": "",
+  "success": true,
+  "data": { ... },
+  "message": "success"
+}
+```
+
+### Ответ при ошибке (HTTP 400 / 401 / 404 / 500)
+```json
+{
+  "success": false,
+  "error": "Описание ошибки",
+  "code": 400
+}
+```
+
+---
+
+## 4. Спецификация эндпоинтов
+
+### 4.1. Аутентификация
+
+#### Получить токен
+```http
+POST /api/auth/token
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "YOUR_ADMIN_PASSWORD"
+}
+```
+**Ответ:**
+```json
+{
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOi...",
+    "expires_at": 1762600000,
+    "user": "admin"
+  }
+}
+```
+
+#### Проверить текущий токен / права
+```http
+GET /api/auth/me
+Authorization: Bearer <TOKEN>
+```
+
+---
+
+### 4.2. Управление пользователями
+
+#### Список пользователей (с поиском и фильтрами)
+```http
+GET /api/users?q={search}&status={status}&limit={limit}&offset={offset}
+X-API-Key: <API_KEY>
+```
+
+**Параметры запроса (Query Params):**
+- `q` *(строка, опционально)* — поиск по имени (`name`), комментарию или паролю.
+- `status` *(строка, опционально)*:
+  - `all` — все пользователи (по умолчанию);
+  - `active` — только активные;
+  - `blocked` — только деактивированные администратором;
+  - `expired` — с истёкшим сроком действия;
+  - `exceeded` — превысившие лимит трафика.
+- `limit` *(число, опционально)* — ограничение количества записей (по умолчанию `50`).
+- `offset` *(число, опционально)* — смещение для пагинации.
+
+**Пример ответа:**
+```json
+{
+  "success": true,
+  "data": {
+    "total": 1,
+    "users": [
+      {
+        "id": "user_alice",
+        "name": "user_alice",
+        "comment": "Alice client",
+        "active": true,
+        "is_expired": false,
+        "is_deactivated": false,
+        "traffic_exceeded": false,
+        "status": "active",
+        "expires_at": 1765000000,
+        "total_gb": 100,
+        "traffic_used_bytes": 1073741824,
+        "traffic_used_fmt": "1.00 GB",
+        "up_bytes": 450000000,
+        "down_bytes": 623741824,
+        "max_devices": 2,
+        "devices_bound": 1,
+        "online": true,
+        "sub_id": "a1b2c3d4e5f6...",
+        "subscription_url": "https://server.domain:2096/sub/a1b2c3d4e5f6...",
+        "link": "wdtt://..."
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### Создать пользователя
+```http
+POST /api/users
+Content-Type: application/json
+X-API-Key: <API_KEY>
+
+{
+  "name": "john_doe",
+  "comment": "Премиум клиент",
+  "total_gb": 50,
+  "expires_at": 1762500000,
+  "max_devices": 3,
+  "max_down_mbps": 50,
+  "max_up_mbps": 50,
+  "active": true
+}
+```
+
+**Правила лимитов (Non-blocking):**
+- `total_gb: 0` или опущено — **безлимитный трафик**;
+- `expires_at: 0` или опущено — **бессрочный доступ**;
+- `password` — если опущен, генерируется случайный криптостойкий пароль;
+- `name` — если опущен, используется сгенерированный пароль.
+
+**Пример ответа:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "john_doe",
+    "password": "autoGeneratedPassword123",
+    "subscription_url": "https://server.domain:2096/sub/...",
+    "link": "wdtt://..."
+  }
+}
+```
+
+---
+
+#### Детальная информация о пользователе
+```http
+GET /api/users/{id}
+X-API-Key: <API_KEY>
+```
+Возвращает полную карточку пользователя, статистику, список привязанных устройств и конфигурации подключения для каждой активной ноды кластера.
+
+---
+
+#### Обновить пользователя
+```http
+PUT /api/users/{id}
+Content-Type: application/json
+X-API-Key: <API_KEY>
+
+{
+  "comment": "Продлено на месяц",
+  "total_gb": 150,
+  "expires_at": 1765100000,
+  "max_devices": 5,
+  "max_down_mbps": 100,
+  "max_up_mbps": 100,
+  "active": true
+}
+```
+
+---
+
+#### Активировать пользователя
+Мгновенно разблокирует доступ пользователя к VPN.
+```http
+POST /api/users/{id}/activate
+X-API-Key: <API_KEY>
+```
+**Ответ:**
+```json
+{
+  "success": true,
+  "message": "user activated"
+}
+```
+
+---
+
+#### Заблокировать пользователя
+Мгновенно прерывает активные сессии и запрещает подключение к нодам.
+```http
+POST /api/users/{id}/block
+X-API-Key: <API_KEY>
+```
+**Ответ:**
+```json
+{
+  "success": true,
+  "message": "user blocked"
+}
+```
+
+---
+
+#### Сбросить трафик
+Обнуляет накопленные счётчики `UpBytes` и `DownBytes`. Если пользователь был заблокирован из-за исчерпания лимита, доступ восстанавливается.
+```http
+POST /api/users/{id}/reset-traffic
+X-API-Key: <API_KEY>
+```
+**Ответ:**
+```json
+{
+  "success": true,
+  "message": "traffic counters reset to 0"
+}
+```
+
+---
+
+#### Удалить пользователя
+Безвозвратно удаляет пользователя из памяти демона WDTT, MongoDB и SQLite.
+```http
+DELETE /api/users/{id}
+X-API-Key: <API_KEY>
+```
+**Ответ:**
+```json
+{
+  "success": true,
+  "message": "user deleted"
+}
+```
+
+---
+
+### 4.3. Кластерные ноды (Multi-Server)
+
+Позволяет подключать внешние VPS-серверы к панели и выдавать пользователям ссылки на все сервера сразу.
+
+#### Список нод
+```http
+GET /api/nodes
+X-API-Key: <API_KEY>
+```
+
+#### Добавить ноду
+```http
+POST /api/nodes
+Content-Type: application/json
+X-API-Key: <API_KEY>
+
+{
+  "name": "Helsinki-01",
+  "host": "fi.yourdomain.com",
   "dtls_port": 56000,
   "wg_port": 56001,
-  "client_port": 9000,
-  "dns": "1.1.1.1",
-  "max_users": 10
+  "raw_port": 56003,
+  "main_password": "CLUSTER_SHARED_PASS",
+  "enabled": true
 }
+```
+
+#### Проверить доступность (Ping)
+```http
+POST /api/nodes/{id}/ping
+X-API-Key: <API_KEY>
+```
+
+#### Удалить ноду
+```http
+DELETE /api/nodes/{id}
+X-API-Key: <API_KEY>
 ```
 
 ---
 
-## Пользователи VPN
+### 4.4. Системные эндпоинты
 
-### `GET /panel/api/users`
+#### Статус сервера
+```http
+GET /api/status
+X-API-Key: <API_KEY>
+```
+Возвращает информацию о версии WDTT, аптайме, потребляемой памяти RAM, запущенных службах (DTLS, RAW UDP, Xray, MongoDB/SQLite) и общем трафике.
 
-Список пользователей + inbound для ссылок.
+#### Перезапуск службы
+```http
+POST /api/system/restart
+X-API-Key: <API_KEY>
+```
 
-**Ответ `obj`:**
+---
 
-```json
-{
-  "main_password": "...",
-  "users": [
-    {
-      "password": "abc123",
-      "comment": "Иван",
-      "device_ids": ["uuid-1"],
-      "devices_bound": 1,
-      "max_devices": 3,
-      "active": true,
-      "online": false,
-      "expires": "бессрочно",
-      "total_gb": 0,
-      "traffic_used_fmt": "1.2 GB",
-      "link": "wdtt://..."
+## 5. Готовые примеры автоматизации
+
+### Python (интеграция с Telegram-ботом)
+```python
+import requests
+import time
+
+BASE_URL = "http://127.0.0.1:2860/api"
+API_KEY = "YOUR_ADMIN_API_KEY"
+HEADERS = {"X-API-Key": API_KEY}
+
+def create_vpn_subscription(user_tg_id: int, days: int = 30, traffic_gb: int = 100):
+    expires_at = int(time.time()) + (days * 86400)
+    payload = {
+        "name": f"tg_{user_tg_id}",
+        "comment": f"Telegram ID {user_tg_id}",
+        "total_gb": traffic_gb,
+        "expires_at": expires_at,
+        "max_devices": 2,
+        "active": True
     }
-  ],
-  "inbound": { "dtls_port": 56000, "wg_port": 56001, ... }
-}
+    resp = requests.post(f"{BASE_URL}/users", json=payload, headers=HEADERS)
+    resp.raise_for_status()
+    data = resp.json()["data"]
+    return {
+        "sub_url": data["subscription_url"],
+        "direct_link": data["link"],
+        "password": data["password"]
+    }
+
+def block_client(user_id: str):
+    resp = requests.post(f"{BASE_URL}/users/{user_id}/block", headers=HEADERS)
+    return resp.json().get("success", False)
+
+def unblock_client(user_id: str):
+    resp = requests.post(f"{BASE_URL}/users/{user_id}/activate", headers=HEADERS)
+    return resp.json().get("success", False)
 ```
 
-### `POST /panel/api/users/add`
-
-Создать пользователя.
-
-**Тело (все поля опциональны):**
-
-```json
-{
-  "password": "",
-  "comment": "новый",
-  "expires_at": 0,
-  "total_gb": 0,
-  "max_down_mbps": 0,
-  "max_up_mbps": 0,
-  "max_devices": 1,
-  "active": true,
-  "count": 1
-}
-```
-
-- `password` пустой → автогенерация  
-- только `count` → массовое создание паролей  
-
-**Ответ:** `{ "password": "..." }` или `{ "passwords": ["...", "..."] }`
-
-### `POST /panel/api/users/update`
-
-**Тело:**
-
-```json
-{
-  "old_password": "старый",
-  "password": "новый",
-  "comment": "...",
-  "expires_at": 1735689600,
-  "total_gb": 50,
-  "max_devices": 3,
-  "device_ids": ["uuid-1"],
-  "active": true,
-  "max_down_mbps": 10,
-  "max_up_mbps": 5
-}
-```
-
-Удаление устройства из списка `device_ids` отвязывает его при сохранении.
-
-### `POST /panel/api/users/reset-traffic`
-
-```json
-{ "password": "userpass" }
-```
-
-### `POST /panel/api/users/delete`
-
-```json
-{ "password": "userpass" }
-```
-
-### `POST /panel/api/password/main`
-
-Сменить главный пароль VPN.
-
-```json
-{ "password": "newMainPass" }
-```
-
----
-
-## Сервисы
-
-### `POST /panel/api/server/restartWdttService`
-
-Перезапуск VPN (unified: in-process restart; legacy: `systemctl restart wdtt`).
-
+### Bash / cURL
 ```bash
-curl -b cookie -X POST "$BASE/panel/api/server/restartWdttService"
-```
+# 1. Поиск клиентов с фильтром по статусу "active"
+curl -s -H "X-API-Key: $API_KEY" "$BASE/api/users?status=active" | jq .
 
-### `POST /panel/api/server/restartXrayService`
+# 2. Мгновенная блокировка пользователя
+curl -s -X POST -H "X-API-Key: $API_KEY" "$BASE/api/users/user_123/block"
 
-```bash
-curl -b cookie -X POST "$BASE/panel/api/server/restartXrayService"
-```
+# 3. Сброс трафика
+curl -s -X POST -H "X-API-Key: $API_KEY" "$BASE/api/users/user_123/reset-traffic"
 
-Legacy `POST /panel/api/service/{wdtt|xray}/{restart|stop|start}` удалён с v1.4.21.
-
----
-
-## Xray
-
-| Метод | Путь | Описание |
-|-------|------|----------|
-| GET | `/panel/api/xray/config` | JSON-конфиг |
-| POST | `/panel/api/xray/config` | Сохранить конфиг + restart xray |
-| GET | `/panel/api/xray/versions` | Доступные версии Xray |
-| POST | `/panel/api/xray/install/{tag}` | Установить версию |
-
-Совместимые эндпоинты 3x-ui: `/panel/xray/*`, `/panel/setting/*` — см. исходники `panel/xray_handlers.go`.
-
----
-
-## Ссылки подключения `wdtt://`
-
-Формат (как `vmess://` в 3x-ui):
-
-```
-wdtt:// + base64(JSON)
-```
-
-JSON:
-
-```json
-{
-  "v": "1",
-  "ps": "WDTT",
-  "tag": "wdtt-in",
-  "add": "YOUR_SERVER_IP",
-  "dtls": 56000,
-  "wg": 56001,
-  "lp": 9000,
-  "id": "password"
-}
-```
-
-Поле `did` (device id) не обязательно — устройства привязываются автоматически до лимита `max_devices`.
-
-Генерация на сервере: `buildWdttShareLink()` в `panel/wdtt_link.go`.
-
----
-
-## Файлы конфигурации
-
-Primary — `/etc/wdtt/panel.db` (SQLite). При обновлении старые JSON в `/etc/wdtt/` импортируются в БД и удаляются (schema v5).
-
-| Файл | Назначение |
-|------|------------|
-| `/etc/wdtt/panel.db` | Панель, users, inbound, xray meta/config |
-| `/etc/wdtt-xray/config.json` | Xray routing (процесс xray читает с диска; панель синхронизирует из БД) |
-
----
-
-## Примеры автоматизации
-
-```bash
-# Создать пользователя на 30 дней, 50 GB, 2 устройства
-curl -b /tmp/wdtt.cookie -X POST "$BASE/panel/api/users/add" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "comment": "API user",
-    "expires_at": '"$(date -d '+30 days' +%s)"',
-    "total_gb": 50,
-    "max_devices": 2
-  }'
-
-# Увеличить лимит активных пользователей и DNS
-curl -b /tmp/wdtt.cookie -X POST "$BASE/panel/api/inbound/save" \
-  -H "Content-Type: application/json" \
-  -d '{"dns":"1.1.1.1","max_users":20,"dtls_port":56000,"wg_port":56001,"client_port":9000}'
+# 4. Удаление
+curl -s -X DELETE -H "X-API-Key: $API_KEY" "$BASE/api/users/user_123"
 ```
 
 ---
 
-## Ограничения API
+## 6. Обратная совместимость с Legacy Web API
 
-- Нет отдельного API-токена — только сессия панели.
-- Unified (`wdtt-app`): изменение inbound/users применяется через hot-reload или in-process restart VPN; панель не останавливается. `wdtt.service` содержит только `-config-dir`.
-- Rate-limit на стороне API не реализован — не публикуйте панель в открытый интернет без HTTPS и смены пароля по умолчанию.
+Старые эндпоинты панели на основе cookies (`POST /login`, `GET /panel/api/users`, `POST /panel/api/users/add`) сохранены для совместимости со старыми версиями интерфейса и клиентами. Однако для новых интеграций рекомендуется использовать RESTful эндпоинты `/api/...`.

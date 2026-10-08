@@ -26,10 +26,8 @@
                         <div class="conn-mobile-title">[[ row.remark || 'WDTT' ]]</div>
                         <div class="conn-mobile-tags">
                           <a-tag color="purple">WDTT</a-tag>
-                          <a-tag color="blue">DTLS [[ row.dtls_port ]]</a-tag>
-                          <a-tag color="green">WG [[ row.wg_port ]]</a-tag>
-                          <a-tag v-if="row.raw_enable !== false" color="orange">RAW [[ row.raw_direct_port || ((Number(row.dtls_port)||56000)+3) ]]</a-tag>
-                          <a-tag v-else>RAW off</a-tag>
+                          <a-tag color="blue">UDP [[ row.dtls_port ]]</a-tag>
+                          <a-tag color="orange">RAW [[ row.raw_direct_port || ((Number(row.dtls_port)||56000)+3) ]]</a-tag>
                         </div>
                       </div>
                       <a-switch :checked="row.enable !== false" :loading="row.toggling"
@@ -66,27 +64,20 @@
                   <template slot="wdttRemark" slot-scope="text">[[ text || '—' ]]</template>
                   <template slot="wdttPort" slot-scope="_, row">
                     <span class="connections-port-cell">
-                      <a-tooltip title="UDP порт DTLS — GETCONF / WG handshake">
-                        <a-tag color="blue" :style="{ margin: 0 }">[[ row.dtls_port ]]</a-tag>
+                      <a-tooltip title="UDP порт DTLS (шифрованный канал)">
+                        <a-tag color="blue" :style="{ margin: 0 }">UDP [[ row.dtls_port ]]</a-tag>
                       </a-tooltip>
-                      <a-tooltip title="UDP порт WireGuard (userspace)">
-                        <a-tag color="green" :style="{ margin: 0 }">[[ row.wg_port ]]</a-tag>
-                      </a-tooltip>
-                      <a-tooltip v-if="row.raw_enable !== false" title="UDP порт direct RAW (WRAP, без DTLS)">
-                        <a-tag color="orange" :style="{ margin: 0 }">[[ row.raw_direct_port || ((Number(row.dtls_port)||56000)+3) ]]</a-tag>
+                      <a-tooltip title="RAW UDP прямой порт (высокая скорость)">
+                        <a-tag color="orange" :style="{ margin: 0 }">RAW [[ row.raw_direct_port || ((Number(row.dtls_port)||56000)+3) ]]</a-tag>
                       </a-tooltip>
                     </span>
                   </template>
                   <template slot="wdttProtocol" slot-scope="_, row">
                     <span class="connections-proto-cell">
                       <a-tag color="purple" :style="{ margin: 0 }">WDTT</a-tag>
-                      <a-tag color="blue" :style="{ margin: 0 }">DTLS</a-tag>
-                      <a-tag color="green" :style="{ margin: 0 }">WG</a-tag>
-                      <a-tooltip v-if="row.raw_enable !== false" :title="'IP без WireGuard · UDP ' + (row.raw_direct_port || ((Number(row.dtls_port)||56000)+3)) + ' · ' + (row.raw_subnet || '10.70.0.0/16') + (row.raw_sessions ? (' · сессий ' + row.raw_sessions) : '')">
+                      <a-tag color="blue" :style="{ margin: 0 }">UDP</a-tag>
+                      <a-tooltip :title="'IP RAW · UDP ' + (row.raw_direct_port || ((Number(row.dtls_port)||56000)+3)) + ' · ' + (row.raw_subnet || '10.70.0.0/16') + (row.raw_sessions ? (' · сессий ' + row.raw_sessions) : '')">
                         <a-tag color="orange" :style="{ margin: 0 }">RAW[[ row.raw_sessions ? (' · ' + row.raw_sessions) : '' ]]</a-tag>
-                      </a-tooltip>
-                      <a-tooltip v-else title="RAW выключен в настройках WDTT">
-                        <a-tag :style="{ margin: 0 }">RAW off</a-tag>
                       </a-tooltip>
                     </span>
                   </template>

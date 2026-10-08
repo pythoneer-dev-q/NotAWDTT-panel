@@ -44,6 +44,26 @@ type PanelConfig struct {
 	ConnectionsPollSec int
 }
 
+// DefaultPanelConfig возвращает настройки панели по умолчанию.
+func DefaultPanelConfig() *PanelConfig {
+	return &PanelConfig{
+		Username:           "admin",
+		Port:               DefaultPanelPort,
+		WebBasePath:        "/wdtt/",
+		SessionMaxAge:      60,
+		PageSize:           50,
+		RemarkModel:        "-ieo",
+		SubEnable:          true,
+		SubPort:            DefaultSubPort,
+		SubPath:            "/sub/",
+		SubEncrypt:         true,
+		SubShowInfo:        true,
+		DashboardPollSec:   2,
+		UsersPollSec:       5,
+		ConnectionsPollSec: 5,
+	}
+}
+
 // HasPanelConfig — есть ли строка в panel_config.
 func HasPanelConfig(db *sql.DB) (bool, error) {
 	n, err := tableCount(db, "panel_config")

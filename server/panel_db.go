@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -43,6 +44,14 @@ func serverPanelDBReady() bool {
 }
 
 func loadDatabaseFromSQLite() (*Database, bool, error) {
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if s, err := m.LoadStore(ctx); err == nil && (s.MainPassword != "" || len(s.Users) > 0) {
+			out := databaseFromStore(s)
+			return out, true, nil
+		}
+	}
 	db, err := openServerPanelDB()
 	if err != nil {
 		return nil, false, err
@@ -62,6 +71,14 @@ func saveDatabaseToSQLite(src *Database) error {
 	if src == nil {
 		return fmt.Errorf("nil database")
 	}
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = m.SaveStore(ctx, storeFromDatabase(src), paneldb.SaveOptions{PreserveSubIDs: true})
+	}
+	if !serverPanelDBReady() {
+		return nil
+	}
 	db, err := openServerPanelDB()
 	if err != nil {
 		return err
@@ -70,8 +87,11 @@ func saveDatabaseToSQLite(src *Database) error {
 }
 
 func persistDeviceSQLiteLocked(dev *ClientDevice) error {
-	if dev == nil || !serverPanelDBReady() {
-		return fmt.Errorf("device or panel.db unavailable")
+	if dev == nil {
+		return fmt.Errorf("device is nil")
+	}
+	if !serverPanelDBReady() {
+		return nil
 	}
 	sqlDB, err := openServerPanelDB()
 	if err != nil {
@@ -86,8 +106,16 @@ func persistDeviceSQLiteLocked(dev *ClientDevice) error {
 }
 
 func persistUserBindingsSQLiteLocked(password string, entry *PasswordEntry) error {
-	if entry == nil || !serverPanelDBReady() {
-		return fmt.Errorf("entry or panel.db unavailable")
+	if entry == nil {
+		return fmt.Errorf("entry is nil")
+	}
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = m.UpsertUser(ctx, password, userToPaneldb(entry))
+	}
+	if !serverPanelDBReady() {
+		return nil
 	}
 	sqlDB, err := openServerPanelDB()
 	if err != nil {
@@ -101,8 +129,16 @@ func persistUserBindingsSQLiteLocked(password string, entry *PasswordEntry) erro
 }
 
 func persistUserEntrySQLiteLocked(password string, entry *PasswordEntry) error {
-	if entry == nil || !serverPanelDBReady() {
-		return fmt.Errorf("entry or panel.db unavailable")
+	if entry == nil {
+		return fmt.Errorf("entry is nil")
+	}
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = m.UpsertUser(ctx, password, userToPaneldb(entry))
+	}
+	if !serverPanelDBReady() {
+		return nil
 	}
 	sqlDB, err := openServerPanelDB()
 	if err != nil {
@@ -116,8 +152,16 @@ func persistUserEntrySQLiteLocked(password string, entry *PasswordEntry) error {
 }
 
 func persistUserRenameSQLiteLocked(oldPass, newPass string, entry *PasswordEntry) error {
-	if entry == nil || !serverPanelDBReady() {
-		return fmt.Errorf("entry or panel.db unavailable")
+	if entry == nil {
+		return fmt.Errorf("entry is nil")
+	}
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = m.RenameUser(ctx, oldPass, newPass, userToPaneldb(entry))
+	}
+	if !serverPanelDBReady() {
+		return nil
 	}
 	sqlDB, err := openServerPanelDB()
 	if err != nil {
@@ -136,8 +180,16 @@ func persistUserRenameSQLiteLocked(oldPass, newPass string, entry *PasswordEntry
 }
 
 func persistUserDevicesSQLiteLocked(password string, entry *PasswordEntry, removedDeviceIDs []string) error {
-	if entry == nil || !serverPanelDBReady() {
-		return fmt.Errorf("entry or panel.db unavailable")
+	if entry == nil {
+		return fmt.Errorf("entry is nil")
+	}
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = m.UpsertUser(ctx, password, userToPaneldb(entry))
+	}
+	if !serverPanelDBReady() {
+		return nil
 	}
 	sqlDB, err := openServerPanelDB()
 	if err != nil {
@@ -151,8 +203,19 @@ func persistUserDevicesSQLiteLocked(password string, entry *PasswordEntry, remov
 }
 
 func persistUserDeactivatedSQLiteLocked(password string, deactivated bool) error {
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		dbMutex.Lock()
+		e := db.Passwords[password]
+		dbMutex.Unlock()
+		if e != nil {
+			e.IsDeactivated = deactivated
+			_ = m.UpsertUser(ctx, password, userToPaneldb(e))
+		}
+	}
 	if !serverPanelDBReady() {
-		return fmt.Errorf("panel.db unavailable")
+		return nil
 	}
 	sqlDB, err := openServerPanelDB()
 	if err != nil {
@@ -166,8 +229,13 @@ func persistUserDeactivatedSQLiteLocked(password string, deactivated bool) error
 }
 
 func persistDeleteUserSQLiteLocked(password string, deviceIDs []string) error {
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = m.DeleteUser(ctx, password)
+	}
 	if !serverPanelDBReady() {
-		return fmt.Errorf("panel.db unavailable")
+		return nil
 	}
 	sqlDB, err := openServerPanelDB()
 	if err != nil {
@@ -234,8 +302,15 @@ func mergeTrafficIntoDatabase(incoming *Database, from map[string]paneldb.Traffi
 }
 
 func saveTrafficToSQLiteLocked() error {
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		for pass, snap := range trafficSnapshotLocked() {
+			_ = m.AddTraffic(ctx, pass, snap.DownBytes, snap.UpBytes)
+		}
+	}
 	if !serverPanelDBReady() {
-		return fmt.Errorf("panel.db not available at %s", panelDBPath)
+		return nil
 	}
 	sqlDB, err := openServerPanelDB()
 	if err != nil {
@@ -255,6 +330,14 @@ func saveTrafficDB() error {
 }
 
 func updateLastSeenInSQLite(password string, ts int64) error {
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = m.UpdateLastSeen(ctx, password, ts)
+	}
+	if !serverPanelDBReady() {
+		return nil
+	}
 	db, err := openServerPanelDB()
 	if err != nil {
 		return err
@@ -264,6 +347,14 @@ func updateLastSeenInSQLite(password string, ts int64) error {
 
 func updateLastSeenBatchInSQLite(updates map[string]int64) error {
 	if len(updates) == 0 {
+		return nil
+	}
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = m.UpdateLastSeenBatch(ctx, updates)
+	}
+	if !serverPanelDBReady() {
 		return nil
 	}
 	db, err := openServerPanelDB()
@@ -477,6 +568,23 @@ func loadPanelServicePortsFromSQLite() (panelPort, subPort int, ok bool, err err
 }
 
 func loadInboundFromSQLite() (inboundRuntimeSettings, bool, error) {
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if in, err := m.LoadInbound(ctx); err == nil && in != nil {
+			return inboundRuntimeSettings{
+				DNS:                 in.DNS,
+				MTU:                 in.MTU,
+				MaxUsers:            in.MaxUsers,
+				HandshakeTimeoutSec: in.HandshakeTimeoutSec,
+				MaxDtlsPerDevice:    in.MaxDtlsPerDevice,
+				OnlineTimeoutSec:    in.OnlineTimeoutSec,
+				WgKeepaliveSec:      in.WgKeepaliveSec,
+				StatsIntervalSec:    in.StatsIntervalSec,
+				RawEnable:           true,
+			}, true, nil
+		}
+	}
 	db, err := openServerPanelDB()
 	if err != nil {
 		return inboundRuntimeSettings{}, false, err
@@ -485,6 +593,31 @@ func loadInboundFromSQLite() (inboundRuntimeSettings, bool, error) {
 }
 
 func loadStartupFromSQLite() (paneldb.StartupSettings, bool, error) {
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if in, err := m.LoadInbound(ctx); err == nil && in != nil {
+			return paneldb.StartupSettings{
+				ListenHost:    in.ListenHost,
+				DtlsPort:      in.DtlsPort,
+				WgPort:        in.WgPort,
+				RawDirectPort: in.RawDirectPort,
+				AdminAddr:     in.AdminAddr,
+				Enable:        in.Enable,
+				RuntimeSettings: paneldb.RuntimeSettings{
+					DNS:                 in.DNS,
+					MTU:                 in.MTU,
+					MaxUsers:            in.MaxUsers,
+					HandshakeTimeoutSec: in.HandshakeTimeoutSec,
+					MaxDtlsPerDevice:    in.MaxDtlsPerDevice,
+					OnlineTimeoutSec:    in.OnlineTimeoutSec,
+					WgKeepaliveSec:      in.WgKeepaliveSec,
+					StatsIntervalSec:    in.StatsIntervalSec,
+					RawEnable:           true,
+				},
+			}, true, nil
+		}
+	}
 	db, err := openServerPanelDB()
 	if err != nil {
 		return paneldb.StartupSettings{}, false, err
@@ -498,7 +631,7 @@ func applyInboundRuntimeSettings(raw inboundRuntimeSettings) {
 	dtlsHandshakeTimeout = 30 * time.Second
 	maxDTLSPerDevice = 0
 	wgMTU = defaultWgMTU
-	rawModeEnabled.Store(raw.RawEnable)
+	rawModeEnabled.Store(true)
 
 	if dns := strings.TrimSpace(raw.DNS); dns != "" {
 		clientDNS = dns

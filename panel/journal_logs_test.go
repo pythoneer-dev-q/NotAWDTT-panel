@@ -1,8 +1,12 @@
 package panel
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFormatJournalLine(t *testing.T) {
@@ -45,6 +49,12 @@ func TestFormatWdttStatsJournalLine(t *testing.T) {
 }
 
 func TestPrependWdttStatsSummary(t *testing.T) {
+	tmp := t.TempDir()
+	origDir := wdttConfigDir
+	wdttConfigDir = tmp
+	defer func() { wdttConfigDir = origDir }()
+	_ = os.WriteFile(filepath.Join(tmp, "server.log"), []byte(fmt.Sprintf(`{"timestamp":%d,"active_users":1,"sessions":10,"total":42,"nat":"MASQUERADE iptables ✅","up_gb":"0.01","down_gb":"0.03"}`, time.Now().Unix())), 0600)
+
 	lines := prependWdttStatsSummary([]string{"2026/06/16 10:00:00 INFO - WDTT: [WG] ok"})
 	if len(lines) != 2 || !strings.Contains(lines[0], "[СТАТ]") {
 		t.Fatalf("expected stats prepended, got %v", lines)

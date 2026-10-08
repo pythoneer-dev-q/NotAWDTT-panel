@@ -69,14 +69,11 @@ func trafficExceeded(entry *PasswordEntry) bool {
 	if entry == nil || entry.TotalBytes <= 0 {
 		return false
 	}
-	return trafficUsed(entry) >= entry.TotalBytes
+	return (entry.UpBytes + entry.DownBytes) >= entry.TotalBytes
 }
 
 func isPasswordExpired(entry *PasswordEntry) bool {
-	if entry == nil {
-		return true
-	}
-	if entry.ExpiresAt == 0 {
+	if entry == nil || entry.ExpiresAt <= 0 {
 		return false
 	}
 	return time.Now().Unix() > entry.ExpiresAt
@@ -85,7 +82,7 @@ func isPasswordExpired(entry *PasswordEntry) bool {
 func countActivePasswords(db *PasswordsDB) int {
 	n := 0
 	for _, e := range db.Passwords {
-		if e != nil && !isPasswordExpired(e) {
+		if e != nil && !isPasswordExpired(e) && !e.IsDeactivated {
 			n++
 		}
 	}
@@ -475,7 +472,7 @@ func createUser(password string, entry *PasswordEntry) (string, error) {
 		return "", err
 	}
 	maxUsers := inboundMaxUsers()
-	if countActivePasswords(db) >= maxUsers {
+	if maxUsers > 0 && countActivePasswords(db) >= maxUsers {
 		return "", fmt.Errorf("максимум %d активных паролей (истёкшие не считаются)", maxUsers)
 	}
 	if _, exists := db.Passwords[password]; exists {
@@ -541,7 +538,8 @@ func resetUserTraffic(pass string) error {
 	if err := resetUserTrafficNorm(pass); err != nil {
 		return err
 	}
-	return applyWdttConfigChange()
+	_ = applyWdttConfigChange()
+	return nil
 }
 
 func deleteUserPassword(pass string) error {

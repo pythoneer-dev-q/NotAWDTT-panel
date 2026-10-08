@@ -66,6 +66,7 @@ func Run() error {
 
 	// Panel pages
 	mux.HandleFunc(base+"panel/", app.serveDashboard)
+	mux.HandleFunc(base+"panel/nodes", app.serveNodesPage)
 	mux.HandleFunc(base+"panel/users", app.serveUsersPage)
 	mux.HandleFunc(base+"panel/connections", app.serveConnectionsPage)
 	mux.HandleFunc(base+"panel/xray", app.serveXrayPage)
@@ -113,6 +114,13 @@ func Run() error {
 	mux.HandleFunc(api+"users/update", app.requireAuthCSRF(app.handleUserUpdate))
 	mux.HandleFunc(api+"users/reset-traffic", app.requireAuthCSRF(app.handleUserResetTraffic))
 	mux.HandleFunc(api+"users/delete", app.requireAuthCSRF(app.handleUserDelete))
+	mux.HandleFunc(api+"nodes", app.requireAuthCSRF(app.handleNodesList))
+	mux.HandleFunc(api+"nodes/save", app.requireAuthCSRF(app.handleNodeSave))
+	mux.HandleFunc(api+"nodes/delete", app.requireAuthCSRF(app.handleNodeDelete))
+	mux.HandleFunc(api+"nodes/ping", app.requireAuthCSRF(app.handleNodePing))
+	mux.HandleFunc(api+"node/sync", app.handleNodeSync)
+	mux.HandleFunc(api+"node/heartbeat", app.handleNodeHeartbeat)
+	mux.HandleFunc(api+"node/install", app.handleNodeInstallScript)
 	mux.HandleFunc(api+"password/main", app.requireAuthCSRF(app.handleMainPassword))
 	mux.HandleFunc(api+"password/panel", app.requireAuthCSRF(app.handlePanelPassword))
 	mux.HandleFunc(api+"xray/versions", app.requireAuthCSRF(app.handleXrayVersions))
@@ -135,6 +143,9 @@ func Run() error {
 	})
 	mux.HandleFunc(base+"panel/vk/login/", app.handleVKLoginProxy)
 	registerVKLoginAssetFallbacks(mux, app)
+
+	// RESTful API (Remnawave-style: Bearer token & API key support, JSON endpoints)
+	registerRestAPI(mux, app, base)
 
 	return startPanelServer(cfg, gzipMiddleware(mux))
 }

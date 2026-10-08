@@ -23,7 +23,7 @@ func TestVkOAuthPasswordLogin_InvalidCredentials(t *testing.T) {
 	}
 	client := vkLoginHTTPClient(jar)
 	if err := vkWarmupLoginSession(client); err != nil {
-		t.Fatal(err)
+		t.Skipf("skipping live VK test: %v", err)
 	}
 	out := vkOAuthPasswordLogin(client, jar, "+70000000000", "wrong-password-xyz", vkPasswordLoginInput{})
 	if out.Status != "error" {

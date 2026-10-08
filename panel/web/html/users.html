@@ -44,12 +44,28 @@
                     </a-popover>
                   </a-button-group>
                 </template>
-                <a-button type="primary" icon="plus" @click="openAddModal" :block="isMobile" style="margin-bottom:12px">
-                  Добавить пользователя
-                </a-button>
+                <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px">
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                    <a-button type="primary" icon="plus" @click="openAddModal">
+                      Добавить пользователя
+                    </a-button>
+                    <a-button icon="api" @click="apiModalVisible = true">
+                      REST API
+                    </a-button>
+                  </div>
+                  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                    <a-radio-group v-model="statusFilter" button-style="solid" size="small">
+                      <a-radio-button value="all">Все ([[ users.length ]])</a-radio-button>
+                      <a-radio-button value="active">Активные ([[ activeCount ]])</a-radio-button>
+                      <a-radio-button value="blocked">Блок ([[ blockedCount ]])</a-radio-button>
+                      <a-radio-button value="expired">Истёкшие ([[ expiredCount ]])</a-radio-button>
+                    </a-radio-group>
+                    <a-input-search v-model="searchQuery" placeholder="Поиск (пароль, имя, устр)..." style="width:230px" allow-clear size="small"></a-input-search>
+                  </div>
+                </div>
                 <div v-if="isMobile" class="user-mobile-list">
-                  <div v-if="!users.length" class="text-muted">Нет пользователей</div>
-                  <div v-for="row in users" :key="rowKey(row)" class="user-mobile-card">
+                  <div v-if="!filteredUsers.length" class="text-muted">Нет пользователей</div>
+                  <div v-for="row in filteredUsers" :key="rowKey(row)" class="user-mobile-card">
                     <div class="user-mobile-head">
                       <div>
                         <a-tag v-if="row.is_main" color="gold" style="margin-bottom:4px">главный</a-tag>
@@ -57,7 +73,10 @@
                         <div class="text-muted" style="font-size:12px;margin-top:2px">[[ row.comment || '—' ]]</div>
                       </div>
                       <div class="user-mobile-status">
-                        <a-tag :color="row.active ? 'green' : 'red'">[[ row.active ? 'активен' : 'выкл' ]]</a-tag>
+                        <a-tag v-if="row.traffic_exceeded" color="purple">лимит</a-tag>
+                        <a-tag v-else-if="row.is_expired" color="orange">истёк</a-tag>
+                        <a-tag v-else-if="row.is_deactivated" color="red">блокирован</a-tag>
+                        <a-tag v-else color="green">активен</a-tag>
                         <a-tag v-if="row.online" color="green">{{ i18n "online" }}</a-tag>
                         <a-tag v-else>{{ i18n "offline" }}</a-tag>
                       </div>
@@ -68,7 +87,7 @@
                         <span v-if="row.is_main">[[ row.device_id || '—' ]] <span v-if="row.devices_bound" class="text-muted">([[ row.devices_bound ]])</span></span>
                         <span v-else>[[ row.devices_bound || 0 ]]/[[ row.max_devices || 1 ]]</span>
                       </div>
-                      <div><span class="user-mobile-label">Срок</span>[[ row.expires || '—' ]]</div>
+                      <div><span class="user-mobile-label">Срок</span>[[ row.expires || 'бессрочно' ]]</div>
                       <div class="user-mobile-span2"><span class="user-mobile-label">Трафик</span>
                         [[ row.traffic_used_fmt || '0 B' ]]
                         <span class="text-muted"> / [[ Number(row.total_gb) > 0 ? (Number(row.total_gb).toFixed(1) + ' GB') : '∞' ]]</span>
@@ -78,12 +97,15 @@
                     <div class="user-mobile-actions">
                       <a-button size="small" icon="link" @click="copyUserLink(row)">Ссылка</a-button>
                       <a-button size="small" icon="qrcode" @click="openShareModal(row)">QR</a-button>
+                      <a-button v-if="!row.is_main" size="small" :icon="row.is_deactivated ? 'play-circle' : 'pause-circle'"
+                        @click="toggleUserBlock(row)">[[ row.is_deactivated ? 'Вкл' : 'Выкл' ]]</a-button>
+                      <a-button v-if="!row.is_main" size="small" icon="reload" @click="resetUserTrafficDirect(row)">Сброс</a-button>
                       <a-button size="small" icon="edit" @click="openEditModal(row)">Изменить</a-button>
                       <a-button v-if="!row.is_main" type="danger" size="small" icon="delete" @click="delUser(row.password_key || row.password)">Удалить</a-button>
                     </div>
                   </div>
                 </div>
-                <a-table v-else :columns="userCols" :data-source="users" :pagination="false" :row-key="rowKey" size="middle">
+                <a-table v-else :columns="userCols" :data-source="filteredUsers" :pagination="false" :row-key="rowKey" size="middle">
                   <span slot="password" slot-scope="text, row">
                     <a-tag v-if="row.is_main" color="gold" style="margin-right:6px">главный</a-tag>
                     <code>[[ text ]]</code>
@@ -103,8 +125,20 @@
                       <div v-if="row.device_id" class="text-muted" style="font-size:11px;margin-top:2px">[[ row.device_id ]]</div>
                     </span>
                   </span>
-                  <span slot="active" slot-scope="active">
-                    <a-tag :color="active ? 'green' : 'red'">[[ active ? 'активен' : 'выкл' ]]</a-tag>
+                  <span slot="expires" slot-scope="_, row">
+                    <span v-if="row.is_main || !row.expires_at" class="text-muted">бессрочно</span>
+                    <span v-else>
+                      <a-tag :color="row.is_expired ? 'orange' : 'blue'">[[ row.expires ]]</a-tag>
+                      <div v-if="row.expires_at" class="text-muted" style="font-size:11px;margin-top:2px">
+                        [[ formatDateUnix(row.expires_at) ]]
+                      </div>
+                    </span>
+                  </span>
+                  <span slot="status_badge" slot-scope="_, row">
+                    <a-tag v-if="row.traffic_exceeded" color="purple">лимит</a-tag>
+                    <a-tag v-else-if="row.is_expired" color="orange">истёк</a-tag>
+                    <a-tag v-else-if="row.is_deactivated" color="red">блокирован</a-tag>
+                    <a-tag v-else color="green">активен</a-tag>
                   </span>
                   <span slot="online" slot-scope="online">
                     <a-tag v-if="online" color="green">{{ i18n "online" }}</a-tag>
@@ -123,13 +157,26 @@
                   </span>
                   <span slot="action" slot-scope="_, row">
                     <a-tooltip title="Копировать ссылку">
-                      <a-button size="small" icon="link" @click="copyUserLink(row)" style="margin-right:6px"></a-button>
+                      <a-button size="small" icon="link" @click="copyUserLink(row)" style="margin-right:4px"></a-button>
                     </a-tooltip>
-                    <a-tooltip title="QR и ссылка">
-                      <a-button size="small" icon="qrcode" @click="openShareModal(row)" style="margin-right:6px"></a-button>
+                    <a-tooltip title="QR и подключения по нодам">
+                      <a-button size="small" icon="qrcode" @click="openShareModal(row)" style="margin-right:4px"></a-button>
                     </a-tooltip>
-                    <a-button size="small" icon="edit" @click="openEditModal(row)" style="margin-right:6px"></a-button>
-                    <a-button v-if="!row.is_main" type="danger" size="small" icon="delete" @click="delUser(row.password_key || row.password)"></a-button>
+                    <a-tooltip v-if="!row.is_main" :title="row.is_deactivated ? 'Активировать' : 'Заблокировать'">
+                      <a-button size="small" :type="row.is_deactivated ? 'dashed' : 'default'"
+                        :icon="row.is_deactivated ? 'play-circle' : 'pause-circle'"
+                        :style="row.is_deactivated ? 'color:#52c41a;margin-right:4px' : 'color:#faad14;margin-right:4px'"
+                        @click="toggleUserBlock(row)"></a-button>
+                    </a-tooltip>
+                    <a-tooltip v-if="!row.is_main" title="Сбросить трафик">
+                      <a-button size="small" icon="reload" @click="resetUserTrafficDirect(row)" style="margin-right:4px"></a-button>
+                    </a-tooltip>
+                    <a-tooltip title="Редактировать">
+                      <a-button size="small" icon="edit" @click="openEditModal(row)" style="margin-right:4px"></a-button>
+                    </a-tooltip>
+                    <a-tooltip v-if="!row.is_main" title="Удалить">
+                      <a-button type="danger" size="small" icon="delete" @click="delUser(row.password_key || row.password)"></a-button>
+                    </a-tooltip>
                   </span>
                 </a-table>
               </a-card>
@@ -138,6 +185,43 @@
         </transition>
       </a-spin>
     </a-layout-content>
+    <a-modal v-model="apiModalVisible" title="WDTT REST API & Интеграции" width="760px" :footer="null" :class="themeSwitcher.currentTheme">
+      <div style="font-size:13px;margin-bottom:12px">
+        Полноценный <b>RESTful API</b> (в стиле Remnawave) с авторизацией через Bearer Token или API Key без обязательных куки и CSRF.
+      </div>
+      <a-card size="small" title="Ключ авторизации (API Key)" style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <code style="font-size:13px;padding:6px 10px;background:rgba(255,255,255,0.06);border-radius:6px;flex:1">[[ apiKey || 'Загрузка...' ]]</code>
+          <a-button icon="copy" type="primary" @click="copyField(apiKey, 'API Key')">Скопировать</a-button>
+        </div>
+        <div class="text-muted" style="font-size:12px;margin-top:6px">
+          Заголовок: <code>X-API-Key: [[ apiKey ]]</code> или <code>Authorization: Bearer [[ apiKey ]]</code>
+        </div>
+      </a-card>
+      <a-collapse :default-active-key="['1']">
+        <a-collapse-panel key="1" header="Примеры запросов (cURL)">
+          <div style="margin-bottom:12px">
+            <b>1. Поиск и получение списка пользователей:</b>
+            <pre style="background:rgba(0,0,0,0.25);padding:8px 12px;border-radius:6px;font-size:12px;margin-top:4px;overflow-x:auto">curl -s -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users?q=test&status=active"</pre>
+          </div>
+          <div style="margin-bottom:12px">
+            <b>2. Создание пользователя:</b>
+            <pre style="background:rgba(0,0,0,0.25);padding:8px 12px;border-radius:6px;font-size:12px;margin-top:4px;overflow-x:auto">curl -X POST -H "X-API-Key: [[ apiKey ]]" -H "Content-Type: application/json" \
+  -d '{"comment":"Client1","total_gb":50,"max_devices":2}' "[[ apiOrigin ]]/api/users"</pre>
+          </div>
+          <div style="margin-bottom:12px">
+            <b>3. Блокировка и Активация:</b>
+            <pre style="background:rgba(0,0,0,0.25);padding:8px 12px;border-radius:6px;font-size:12px;margin-top:4px;overflow-x:auto">curl -X POST -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD/block"
+curl -X POST -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD/activate"</pre>
+          </div>
+          <div style="margin-bottom:6px">
+            <b>4. Сброс трафика и Удаление:</b>
+            <pre style="background:rgba(0,0,0,0.25);padding:8px 12px;border-radius:6px;font-size:12px;margin-top:4px;overflow-x:auto">curl -X POST -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD/reset-traffic"
+curl -X DELETE -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD"</pre>
+          </div>
+        </a-collapse-panel>
+      </a-collapse>
+    </a-modal>
   </a-layout>
 </a-layout>
 
@@ -229,23 +313,62 @@
       loadingStates: { fetched: false, spinning: false },
       showAlert: false,
       users: [],
+      nodes: [],
       serverIp: '',
-      inbound: { dtls_port: 56000, wg_port: 56001, client_port: 9000 },
+      inbound: { dtls_port: 56000, raw_direct_port: 56003, client_port: 9000 },
       isRefreshEnabled: localStorage.getItem("isRefreshEnabled") === "true",
       refreshing: false,
       refreshInterval: Number(localStorage.getItem("refreshInterval")) || 5000,
       usersRev: 0,
+      searchQuery: '',
+      statusFilter: 'all',
+      apiModalVisible: false,
+      apiKey: '',
       userCols: [
         { title: 'Пароль', dataIndex: 'password', scopedSlots: { customRender: 'password' } },
         { title: 'Комментарий', dataIndex: 'comment', scopedSlots: { customRender: 'comment' } },
-        { title: 'VK_HASH', dataIndex: 'vk_hash', scopedSlots: { customRender: 'vk_hash' }, width: 120 },
-        { title: 'Устройства', scopedSlots: { customRender: 'device' } },
-        { title: 'Срок', dataIndex: 'expires' },
-        { title: 'Статус', dataIndex: 'active', scopedSlots: { customRender: 'active' } },
-        { title: '{{ i18n "online" }}', dataIndex: 'online', scopedSlots: { customRender: 'online' }, width: 90, align: 'center' },
-        { title: 'Трафик', scopedSlots: { customRender: 'traffic' } },
-        { title: '', scopedSlots: { customRender: 'action' }, width: 165 },
+        { title: 'VK_HASH', dataIndex: 'vk_hash', scopedSlots: { customRender: 'vk_hash' }, width: 110 },
+        { title: 'Устройства', scopedSlots: { customRender: 'device' }, width: 110 },
+        { title: 'Срок', scopedSlots: { customRender: 'expires' }, width: 125 },
+        { title: 'Статус', scopedSlots: { customRender: 'status_badge' }, width: 105 },
+        { title: '{{ i18n "online" }}', dataIndex: 'online', scopedSlots: { customRender: 'online' }, width: 85, align: 'center' },
+        { title: 'Трафик', scopedSlots: { customRender: 'traffic' }, width: 175 },
+        { title: '', scopedSlots: { customRender: 'action' }, width: 220, align: 'right' },
       ],
+    },
+    computed: {
+      activeCount() {
+        return this.users.filter(u => u.active && !u.is_expired && !u.traffic_exceeded).length;
+      },
+      blockedCount() {
+        return this.users.filter(u => u.is_deactivated).length;
+      },
+      expiredCount() {
+        return this.users.filter(u => u.is_expired).length;
+      },
+      apiOrigin() {
+        return window.location.origin;
+      },
+      filteredUsers() {
+        const q = (this.searchQuery || '').trim().toLowerCase();
+        const sf = this.statusFilter;
+        return this.users.filter(u => {
+          if (q) {
+            const pass = String(u.password || '').toLowerCase();
+            const passKey = String(u.password_key || '').toLowerCase();
+            const comment = String(u.comment || '').toLowerCase();
+            const vk = String(u.vk_hash || '').toLowerCase();
+            const dev = String(u.device_id || '').toLowerCase();
+            if (!pass.includes(q) && !passKey.includes(q) && !comment.includes(q) && !vk.includes(q) && !dev.includes(q)) {
+              return false;
+            }
+          }
+          if (sf === 'active') return u.active && !u.is_expired && !u.traffic_exceeded;
+          if (sf === 'blocked') return u.is_deactivated;
+          if (sf === 'expired') return u.is_expired;
+          return true;
+        });
+      },
     },
     async mounted() {
       if (window.location.protocol !== "https:") {
@@ -285,6 +408,10 @@
         if (v <= 0) return 0;
         return Math.round(v * 8 * 10) / 10;
       },
+      formatDateUnix(ts) {
+        if (!ts) return '—';
+        return moment.unix(ts).format('DD.MM.YYYY');
+      },
       formatVkHashCell(text) {
         const list = wdttParseVkHashes(text || '');
         if (!list.length) return '—';
@@ -296,6 +423,13 @@
       toast(msg, ok) {
         if (ok) this.$message.success(msg); else this.$message.error(msg);
       },
+      copyField(val, label) {
+        const v = (val || '').trim();
+        if (!v) return;
+        wdttCopyLink(v,
+          () => this.$message.success((label || 'Ключ') + ' скопирован'),
+          (err) => this.$message.error(err || 'Не удалось скопировать'));
+      },
       openAddModal() {
         userModal.showAdd(this.serverIp, this.inbound);
       },
@@ -303,7 +437,7 @@
         userModal.showEdit(row, this.serverIp, this.inbound);
       },
       openShareModal(row) {
-        userModal.showLink(row, this.serverIp, this.inbound);
+        userModal.showLink(row, this.serverIp, this.inbound, this.nodes);
       },
       copyUserLink(row) {
         const self = this;
@@ -338,6 +472,10 @@
           return;
         }
         this.users = msg.obj.users || [];
+        this.nodes = msg.obj.nodes || [];
+        if (msg.obj.api_key) {
+          this.apiKey = msg.obj.api_key;
+        }
         if (msg.obj.inbound) {
           this.inbound = msg.obj.inbound;
         }
@@ -348,6 +486,48 @@
           this.refreshing = false;
           if (withSpinner) this.loadingStates.spinning = false;
         }, 500);
+      },
+      async toggleUserBlock(row) {
+        const pass = row.password_key || row.password;
+        const willBlock = !row.is_deactivated;
+        const action = willBlock ? 'block' : 'activate';
+        try {
+          const res = await wdttFetchPost(basePath + 'api/users/' + encodeURIComponent(pass) + '/' + action, {});
+          const msg = await res.json();
+          if (msg.success) {
+            this.toast(willBlock ? 'Пользователь заблокирован' : 'Пользователь активирован', true);
+            this.loadUsers();
+          } else {
+            this.toast(msg.error || msg.msg || 'Ошибка', false);
+          }
+        } catch (e) {
+          this.toast(String(e), false);
+        }
+      },
+      resetUserTrafficDirect(row) {
+        const pass = row.password_key || row.password;
+        const self = this;
+        this.$confirm({
+          title: 'Сбросить трафик?',
+          content: 'Обнулить счётчики трафика для ' + (row.comment || pass) + '?',
+          class: themeSwitcher.currentTheme,
+          okText: 'Сбросить',
+          cancelText: 'Отмена',
+          onOk: async () => {
+            try {
+              const res = await wdttFetchPost(basePath + 'api/users/' + encodeURIComponent(pass) + '/reset-traffic', {});
+              const msg = await res.json();
+              if (msg.success) {
+                self.toast('Трафик сброшен', true);
+                self.loadUsers();
+              } else {
+                self.toast(msg.error || msg.msg || 'Ошибка', false);
+              }
+            } catch (e) {
+              self.toast(String(e), false);
+            }
+          },
+        });
       },
       async startDataRefreshLoop() {
         while (this.isRefreshEnabled) {

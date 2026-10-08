@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ildarmaga/wdtt/pkg/paneldb"
 	"github.com/ildarmaga/wdtt/pkg/vkhash"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -86,15 +87,35 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
 	stats := loadServerStats()
 	db, _ := loadPasswords()
+	mongoOk := false
+	nodesCount := 1
+	nodesOnline := 1
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		mongoOk = true
+		if nodes, err := m.ListNodes(r.Context()); err == nil {
+			nodesCount = len(nodes)
+			online := 0
+			for _, n := range nodes {
+				if n.Status == "online" {
+					online++
+				}
+			}
+			nodesOnline = online
+		}
+	}
+
 	jsonOK(w, map[string]interface{}{
-		"wdtt_active":      serviceActive(wdttServiceUnit),
-		"xray_active":      serviceActive(xrayServiceUnit),
-		"wdtt_iface":       getWdttIface(),
-		"xray_version":     xrayVersion(),
-		"xray_binary":      xrayBinary(),
-		"stats":            stats,
-		"users_count":      len(db.Passwords),
-		"devices_count":    len(db.Devices),
+		"wdtt_active":        serviceActive(wdttServiceUnit),
+		"xray_active":        serviceActive(xrayServiceUnit),
+		"mongo_active":       mongoOk,
+		"nodes_count":        nodesCount,
+		"nodes_online":       nodesOnline,
+		"wdtt_iface":         getWdttIface(),
+		"xray_version":       xrayVersion(),
+		"xray_binary":        xrayBinary(),
+		"stats":              stats,
+		"users_count":        len(db.Passwords),
+		"devices_count":      len(db.Devices),
 		"server_ip":          a.serverIP(),
 		"default_link_host":  a.defaultLinkHost(),
 		"panel_tls":          panelTLSEnabled(a.cfg),
@@ -165,7 +186,9 @@ func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
 			"traffic_used":       used,
 			"traffic_used_fmt":   formatBytes(used),
 			"traffic_exceeded":   trafficExceeded(entry),
-			"active":             !entry.IsDeactivated && !isPasswordExpired(entry),
+			"is_expired":         isPasswordExpired(entry),
+			"is_deactivated":     entry.IsDeactivated,
+			"active":             !entry.IsDeactivated && !isPasswordExpired(entry) && !trafficExceeded(entry),
 			"online":             userOnlineFromStats(pass, deviceIDsDisplay(entry), false, stats),
 			"last_seen_at":       entry.LastSeenAt,
 			"ports":              entry.Ports,
@@ -186,9 +209,15 @@ func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
 			"ip": dev.IP,
 		})
 	}
+	var clusterNodes []*paneldb.Node
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		clusterNodes, _ = m.ListNodes(r.Context())
+	}
 	jsonOK(w, map[string]interface{}{
 		"users":         users,
 		"devices":       devices,
+		"nodes":         clusterNodes,
+		"api_key":       a.cfg.ApiKey,
 		"inbound": map[string]interface{}{
 			"tag":               inbound.Tag,
 			"sub_title":         a.cfg.SubTitle,

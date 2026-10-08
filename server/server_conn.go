@@ -69,20 +69,20 @@ func handleConn(ctx context.Context, clientConn net.Conn, wgEndpoint string, wgD
 	firstPacket := buf[:n]
 	firstStr := string(firstPacket)
 
-	// Старый RAW поверх DTLS убран: только direct WRAP на DTLS+3.
+	// Режим WireGuard вырезан: работаем только через RAW и UDP (DTLS/RAW direct)
 	if isRawConfPacket(firstStr) {
-		log.Printf("[DTLS] RAWCONF отклонён с %s — нужен direct RAW (DTLS+3)", clientConn.RemoteAddr())
-		_, _ = clientConn.Write([]byte("NOCONF"))
+		handleRawConf(ctx, clientConn, firstStr, wrapAuthPass)
 		return
 	}
 
-	if !strings.HasPrefix(firstStr, "GETCONF:") {
-		preview := firstStr
-		if len(preview) > 32 {
-			preview = preview[:32] + "..."
-		}
-		log.Printf("[DTLS] Unexpected first packet from %s: %q", clientConn.RemoteAddr(), preview)
+	if strings.HasPrefix(firstStr, "GETCONF:") {
+		// Адаптируем legacy GETCONF запрос к формату RAWCONF
+		handleRawConf(ctx, clientConn, "RAWCONF:"+strings.TrimPrefix(firstStr, "GETCONF:"), wrapAuthPass)
+		return
 	}
+
+	handleRawConf(ctx, clientConn, firstStr, wrapAuthPass)
+	return
 
 	if strings.HasPrefix(firstStr, "GETCONF:") {
 		parts := strings.Split(strings.TrimSpace(strings.TrimPrefix(firstStr, "GETCONF:")), "|")

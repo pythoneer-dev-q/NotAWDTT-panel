@@ -94,13 +94,7 @@ func entryDeviceSlotsLeft(entry *PasswordEntry) int {
 }
 
 func entryCanAcceptDevice(entry *PasswordEntry, deviceID string) bool {
-	if entryIsMainPassword(entry) {
-		return true
-	}
-	if entryHasDevice(entry, deviceID) {
-		return true
-	}
-	return entryDeviceSlotsLeft(entry) > 0
+	return true // Лимиты устройств вырезаны: подключение любого количества устройств
 }
 
 func bindDeviceToEntry(entry *PasswordEntry, deviceID string) bool {
@@ -110,9 +104,6 @@ func bindDeviceToEntry(entry *PasswordEntry, deviceID string) bool {
 	normalizeEntryDevices(entry)
 	if entryHasDevice(entry, deviceID) {
 		return true
-	}
-	if !entryIsMainPassword(entry) && entryDeviceSlotsLeft(entry) <= 0 {
-		return false
 	}
 	unbindDeviceFromOtherEntries(deviceID, entry)
 	entry.DeviceIDs = append(entry.DeviceIDs, deviceID)

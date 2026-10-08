@@ -1,11 +1,13 @@
 package panel
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/ildarmaga/wdtt/pkg/paneldb"
 )
@@ -239,6 +241,15 @@ func ensureLegacySettingsImported() {
 }
 
 func loadPanelConfigNorm() (*PanelConfig, error) {
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if pc, err := m.LoadPanelConfig(ctx); err == nil && pc != nil {
+			cfg := panelConfigFromPaneldb(pc)
+			normalizeSubConfig(cfg)
+			return cfg, nil
+		}
+	}
 	if !panelDBEnabled() {
 		return nil, os.ErrNotExist
 	}
@@ -255,14 +266,31 @@ func loadPanelConfigNorm() (*PanelConfig, error) {
 }
 
 func savePanelConfigNorm(cfg *PanelConfig) error {
-	if !panelDBEnabled() || cfg == nil {
+	if cfg == nil {
 		return nil
 	}
 	normalizeSubConfig(cfg)
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = m.SavePanelConfig(ctx, panelConfigToPaneldb(cfg))
+	}
+	if !panelDBEnabled() {
+		return nil
+	}
 	return paneldb.SavePanelConfig(panelDB, panelConfigToPaneldb(cfg))
 }
 
 func loadPasswordsNorm() (*PasswordsDB, error) {
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if s, err := m.LoadStore(ctx); err == nil && (s.MainPassword != "" || len(s.Users) > 0) {
+			db := passwordsDBFromStore(s)
+			dedupePasswordDeviceBindings(db)
+			return db, nil
+		}
+	}
 	if !panelDBEnabled() {
 		return nil, os.ErrNotExist
 	}
@@ -280,7 +308,16 @@ func loadPasswordsNorm() (*PasswordsDB, error) {
 }
 
 func savePasswordsNorm(db *PasswordsDB) error {
-	if !panelDBEnabled() || db == nil {
+	if db == nil {
+		return nil
+	}
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = m.SaveStore(ctx, storeFromPasswordsDB(db), paneldb.SaveOptions{PreserveSubIDs: true})
+	}
+	if !panelDBEnabled() {
+		invalidatePasswordsCache()
 		return nil
 	}
 	if err := mergeTrafficFromDisk(db); err != nil {
@@ -294,8 +331,17 @@ func savePasswordsNorm(db *PasswordsDB) error {
 }
 
 func patchUserDeviceBindingsNorm(db *PasswordsDB, password string, entry *PasswordEntry, removeDeviceIDs []string) error {
-	if !panelDBEnabled() || db == nil || entry == nil {
+	if db == nil || entry == nil {
 		return fmt.Errorf("panel database not available")
+	}
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = m.UpsertUser(ctx, password, userEntryToPaneldb(entry))
+	}
+	if !panelDBEnabled() {
+		invalidatePasswordsCache()
+		return nil
 	}
 	err := paneldb.PatchUserDeviceBindings(panelDB, db.MainPassword, password, entry.DeviceIDs, removeDeviceIDs)
 	if err == nil {
@@ -305,8 +351,17 @@ func patchUserDeviceBindingsNorm(db *PasswordsDB, password string, entry *Passwo
 }
 
 func upsertUserNorm(db *PasswordsDB, password string, entry *PasswordEntry) error {
-	if !panelDBEnabled() || db == nil || entry == nil {
+	if db == nil || entry == nil {
 		return fmt.Errorf("panel database not available")
+	}
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = m.UpsertUser(ctx, password, userEntryToPaneldb(entry))
+	}
+	if !panelDBEnabled() {
+		invalidatePasswordsCache()
+		return nil
 	}
 	if err := mergeTrafficFromDisk(db); err != nil {
 		return err
@@ -319,8 +374,17 @@ func upsertUserNorm(db *PasswordsDB, password string, entry *PasswordEntry) erro
 }
 
 func updateMainPasswordNorm(db *PasswordsDB, oldMain, newMain string, entry *PasswordEntry) error {
-	if !panelDBEnabled() || db == nil || entry == nil {
+	if db == nil || entry == nil {
 		return fmt.Errorf("panel database not available")
+	}
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = m.RenameUser(ctx, oldMain, newMain, userEntryToPaneldb(entry))
+	}
+	if !panelDBEnabled() {
+		invalidatePasswordsCache()
+		return nil
 	}
 	if err := mergeTrafficFromDisk(db); err != nil {
 		return err
@@ -405,6 +469,15 @@ func mergeTrafficFromDisk(db *PasswordsDB) error {
 }
 
 func loadInboundNorm() (WdttInboundConfig, error) {
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if in, err := m.LoadInbound(ctx); err == nil && in != nil {
+			cfg := wdttInboundFromPaneldb(in)
+			cfg.normalize()
+			return cfg, nil
+		}
+	}
 	cfg := defaultWdttInbound()
 	if !panelDBEnabled() {
 		return cfg, os.ErrNotExist
@@ -423,10 +496,15 @@ func loadInboundNorm() (WdttInboundConfig, error) {
 }
 
 func saveInboundNorm(cfg WdttInboundConfig) error {
+	cfg.normalize()
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = m.SaveInbound(ctx, wdttInboundToPaneldb(cfg))
+	}
 	if !panelDBEnabled() {
 		return nil
 	}
-	cfg.normalize()
 	return paneldb.SaveInbound(panelDB, wdttInboundToPaneldb(cfg))
 }
 

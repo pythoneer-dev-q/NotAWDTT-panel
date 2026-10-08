@@ -9,6 +9,7 @@ function wdttBuildShareLink(opts) {
     name: userName,
     ip: host,
     dtls: Number(opts.dtls) || 56000,
+    raw: Number(opts.raw) || (Number(opts.dtls) ? Number(opts.dtls) + 3 : 56003),
     pass: password,
   };
   if (opts.deviceId) obj.did = opts.deviceId;

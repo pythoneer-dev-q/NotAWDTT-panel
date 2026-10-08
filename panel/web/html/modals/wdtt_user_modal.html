@@ -17,27 +17,17 @@
           </template>
           <a-input v-model.trim="userForm.password"></a-input>
         </a-form-item>
-        <a-form-item v-if="!userModal.isMain">
-          <template slot="label">
-            <a-tooltip title="Сколько устройств может подключиться по этому паролю. Первые N привязываются автоматически при входе.">
-              Лимит устройств <a-icon type="question-circle"></a-icon>
-            </a-tooltip>
-          </template>
-          <a-input-number v-model="userForm.max_devices" :min="1" :max="20" :style="{ width: '100%' }"></a-input-number>
-        </a-form-item>
         <a-form-item v-if="userModal.isMain || userModal.isEdit">
           <template slot="label">Привязанные устройства</template>
           <div v-if="!userForm.device_ids.length" class="text-muted" style="font-size:12px">
-            <span v-if="userModal.isMain">Нет привязанных устройств. Новые подключатся автоматически при входе с главным паролем.</span>
-            <span v-else>Нет привязанных устройств. Первое подключение займёт свободный слот.</span>
+            Нет привязанных устройств. Подключаются автоматически (без ограничений).
           </div>
           <div v-if="userForm.device_ids.length">
             <a-tag v-for="(devId, idx) in userForm.device_ids" :key="devId" closable @close="removeDevice(idx)" style="margin-bottom:6px">
               [[ devId.length > 12 ? devId.slice(0, 8) + '…' : devId ]]
             </a-tag>
             <div class="text-muted" style="font-size:12px;margin-top:4px">
-              <span v-if="userModal.isMain">[[ userForm.device_ids.length ]] устр. · без лимита</span>
-              <span v-else>[[ userForm.device_ids.length ]]/[[ userForm.max_devices ]] слотов занято</span>
+              [[ userForm.device_ids.length ]] устр. · без лимита
             </div>
           </div>
         </a-form-item>
@@ -60,48 +50,45 @@
             Задано хешей: [[ connVkHashCount ]] · iOS возьмёт первый, остальные клиенты — все
           </div>
         </a-form-item>
-        <a-form-item v-if="!userModal.isMain">
-          <template slot="label">
-            <a-tooltip title="0 = без ограничения">
-              Срок действия <a-icon type="question-circle"></a-icon>
-            </a-tooltip>
-          </template>
-          <a-space direction="vertical" style="width:100%">
-            <a-checkbox v-model="userForm.unlimited">Бессрочно</a-checkbox>
-            <a-date-picker v-if="!userForm.unlimited" v-model="userForm.expiryDate"
-              :style="{ width: '100%' }" format="DD.MM.YYYY" placeholder="Выберите дату"></a-date-picker>
-          </a-space>
+        <a-form-item v-if="!userModal.isMain" label="Лимит трафика (GB)">
+          <a-input-number v-model="userForm.total_gb" :min="0" :step="1" placeholder="0 = без ограничений" style="width: 100%"></a-input-number>
+          <div class="text-muted" style="font-size:12px;margin-top:4px">
+            [[ Number(userForm.total_gb) > 0 ? (userForm.total_gb + ' GB') : '0 или пусто = безлимитный трафик' ]]
+          </div>
         </a-form-item>
-        <a-form-item v-if="!userModal.isMain">
-          <template slot="label">
-            <a-tooltip title="0 = без ограничения">
-              Лимит трафика (GB) <a-icon type="question-circle"></a-icon>
-            </a-tooltip>
-          </template>
-          <a-input-number v-model="userForm.total_gb" :min="0" :step="0.1" :style="{ width: '100%' }"></a-input-number>
+        <a-form-item v-if="!userModal.isMain" label="Срок действия">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <a-switch v-model="userForm.unlimited" checked-children="Бессрочно" un-checked-children="Лимит"></a-switch>
+            <span class="text-muted" style="font-size:12px">[[ userForm.unlimited ? 'Бессрочный доступ (без истечения)' : 'Ограниченный срок' ]]</span>
+          </div>
+          <div v-if="!userForm.unlimited">
+            <a-date-picker v-model="userForm.expiryDate" format="YYYY-MM-DD" placeholder="Выберите дату окончания" style="width:100%"></a-date-picker>
+            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+              <a-button size="small" @click="setExpiryDays(30)">+30 дн.</a-button>
+              <a-button size="small" @click="setExpiryDays(90)">+90 дн.</a-button>
+              <a-button size="small" @click="setExpiryDays(180)">+180 дн.</a-button>
+              <a-button size="small" @click="setExpiryDays(365)">+1 год</a-button>
+            </div>
+          </div>
         </a-form-item>
-        <a-form-item v-if="!userModal.isMain">
-          <template slot="label">
-            <a-tooltip title="0 = без ограничения. Скорость скачивания для клиента (↓). Указывается в Мбит/с: 1 ≈ 1 мегабит в секунду.">
-              Лимит скорости ↓ (Мбит/с) <a-icon type="question-circle"></a-icon>
-            </a-tooltip>
-          </template>
-          <a-input-number v-model="userForm.max_down_mbit" :min="0" :step="0.1" :precision="1" :style="{ width: '100%' }"></a-input-number>
+        <a-form-item v-if="!userModal.isMain" label="Макс. устройств">
+          <a-input-number v-model="userForm.max_devices" :min="1" :max="100" style="width: 100%"></a-input-number>
+          <div class="text-muted" style="font-size:12px;margin-top:4px">
+            Слоты для одновременных устройств (по умолчанию 1)
+          </div>
         </a-form-item>
-        <a-form-item v-if="!userModal.isMain">
-          <template slot="label">
-            <a-tooltip title="0 = без ограничения. Скорость отдачи клиента (↑). Указывается в Мбит/с.">
-              Лимит скорости ↑ (Мбит/с) <a-icon type="question-circle"></a-icon>
-            </a-tooltip>
-          </template>
-          <a-input-number v-model="userForm.max_up_mbit" :min="0" :step="0.1" :precision="1" :style="{ width: '100%' }"></a-input-number>
+        <a-form-item v-if="!userModal.isMain" label="Лимит скорости (Мбит/с)">
+          <a-row :gutter="8">
+            <a-col :span="12">
+              <a-input-number v-model="userForm.max_down_mbit" :min="0" placeholder="↓ Загрузка (0 = ∞)" style="width:100%"></a-input-number>
+            </a-col>
+            <a-col :span="12">
+              <a-input-number v-model="userForm.max_up_mbit" :min="0" placeholder="↑ Отдача (0 = ∞)" style="width:100%"></a-input-number>
+            </a-col>
+          </a-row>
         </a-form-item>
         <a-form-item v-if="userModal.isEdit || userModal.isMain" label="Использовано">
-          <a-tag :color="trafficTagColor">[[ formatBytes(trafficUsed) ]]</a-tag>
-          <span v-if="userForm.total_gb > 0" class="text-muted" style="margin-left:8px">
-            / [[ userForm.total_gb.toFixed(2) ]] GB
-          </span>
-          <span v-else-if="userModal.isMain" class="text-muted" style="margin-left:8px">/ ∞</span>
+          <a-tag :color="trafficTagColor">[[ formatBytes(trafficUsed) ]] <span v-if="Number(userForm.total_gb) > 0">/ [[ userForm.total_gb ]] GB</span><span v-else>/ ∞</span></a-tag>
           <a-button v-if="!userModal.isMain" size="small" icon="reload" style="margin-left:12px" :loading="userModal.resetting"
             @click="resetTraffic">Сбросить</a-button>
         </a-form-item>
@@ -117,6 +104,14 @@
     <a-tab-pane key="conn" tab="Подключение" :forceRender="true">
       <a-row :gutter="[16, 16]">
         <a-col :xs="24" :md="14">
+          <div v-if="nodesList && nodesList.length > 1" class="user-conn-block" style="margin-bottom:12px;">
+            <div class="user-conn-label">Сервер / VPS-нода для подключения</div>
+            <a-select v-model="selectedNodeId" style="width:100%;" @change="onNodeChange">
+              <a-select-option v-for="n in nodesList" :key="n.id" :value="n.id">
+                [[ n.name ]] — [[ n.host || userModal.serverIp ]]
+              </a-select-option>
+            </a-select>
+          </div>
           <div class="user-conn-block">
             <div class="user-conn-label">Ссылка</div>
             <code class="user-conn-code user-conn-code--copy" title="Нажмите чтобы скопировать"
@@ -205,9 +200,13 @@
       this.visible = true;
       userModalApp.loadRow(row);
     },
-    showLink(row, serverIp, inbound) {
+    showLink(row, serverIp, inbound, nodes) {
       this.showEdit(row, serverIp, inbound);
       this.activeTab = 'conn';
+      if (nodes && nodes.length) {
+        userModalApp.nodesList = nodes;
+        userModalApp.selectedNodeId = nodes[0].id;
+      }
       userModalApp.scheduleRenderQR();
     },
     close() {
@@ -229,40 +228,44 @@
       linkSnapshot: null,
       qrInstance: null,
       subQrInstance: null,
+      nodesList: [],
+      selectedNodeId: 'local',
       userForm: {
         password: '',
         device_ids: [],
-        max_devices: 1,
         comment: '',
         active: true,
-        unlimited: true,
-        expiryDate: null,
-        expires_at: 0,
         up_bytes: 0,
         down_bytes: 0,
-        total_gb: 0,
       },
     },
     computed: {
       modalInbound() {
-        return this.userModal.inbound || { dtls_port: 56000, wg_port: 56001, client_port: 9000, dns: '1.1.1.1' };
+        return this.userModal.inbound || { dtls_port: 56000, raw_direct_port: 56003, client_port: 9000, dns: '1.1.1.1' };
       },
       connPorts() {
-        const inbound = this.modalInbound;
-        if (this.userForm.use_custom_ports) {
-          return {
-            dtls: Number(this.userForm.dtls_port) || inbound.dtls_port || 56000,
-            wg: Number(this.userForm.wg_port) || inbound.wg_port || 56001,
-            client: Number(this.userForm.client_port) || inbound.client_port || 9000,
-          };
+        if (this.selectedNodeId && this.nodesList && this.nodesList.length) {
+          const n = this.nodesList.find(x => x.id === this.selectedNodeId);
+          if (n) {
+            return {
+              dtls: n.dtls_port || 56000,
+              raw: n.raw_port || 56003,
+              client: 9000,
+            };
+          }
         }
+        const inbound = this.modalInbound;
         return {
           dtls: inbound.dtls_port || 56000,
-          wg: inbound.wg_port || 56001,
+          raw: inbound.raw_direct_port || 56003,
           client: inbound.client_port || 9000,
         };
       },
       connHost() {
+        if (this.selectedNodeId && this.nodesList && this.nodesList.length) {
+          const n = this.nodesList.find(x => x.id === this.selectedNodeId);
+          if (n && n.host) return n.host.trim();
+        }
         const inb = this.modalInbound;
         return (inb.server_host || inb.default_link_host || this.userModal.serverIp || '').trim();
       },
@@ -407,6 +410,9 @@
       },
     },
     methods: {
+      onNodeChange() {
+        this.scheduleRenderQR();
+      },
       resetQR() {
         this.qrInstance = null;
         this.subQrInstance = null;
@@ -444,6 +450,12 @@
           out += WDTT_PASS_CHARS[Math.floor(Math.random() * WDTT_PASS_CHARS.length)];
         }
         return out;
+      },
+      setExpiryDays(days) {
+        this.userForm.unlimited = false;
+        const d = moment().add(days, 'days');
+        this.userForm.expiryDate = d;
+        this.userForm.expires_at = d.endOf('day').unix();
       },
       regenPassword() {
         this.userForm.password = this.genPassword();

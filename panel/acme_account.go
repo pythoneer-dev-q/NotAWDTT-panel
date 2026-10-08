@@ -18,7 +18,11 @@ func resolveAcmeContactEmail(cfg *PanelConfig, override string) string {
 		return e
 	}
 	if cfg != nil {
-		if d := strings.TrimSpace(strings.ToLower(cfg.panelDomain())); d != "" && !isValidIP(d) && isValidDomain(d) {
+		d := strings.TrimSpace(strings.ToLower(cfg.panelDomain()))
+		if isValidIP(d) {
+			return ""
+		}
+		if d != "" && isValidDomain(d) {
 			e := "admin@" + d
 			if isValidAcmeContactEmail(e) {
 				return e

@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -58,10 +60,10 @@ func initServerFlags() {
 
 func baseServerConfigFromFlags() ServerConfig {
 	initServerFlags()
-	return ServerConfig{
+	cfg := ServerConfig{
 		Listen:           *flagListen,
 		WgPort:           *flagWgPort,
-		WgEnable:         *flagWgEnable,
+		WgEnable:         false,
 		ConfigDir:        *flagConfigDir,
 		MainPass:         *flagMainPass,
 		AdminID:          *flagAdminID,
@@ -70,6 +72,23 @@ func baseServerConfigFromFlags() ServerConfig {
 		AdminAddr:        *flagAdminAddr,
 		MaxDTLSPerDevice: *flagMaxDTLSDev,
 	}
+	if envMainPass := strings.TrimSpace(os.Getenv("WDTT_MAIN_PASSWORD")); envMainPass != "" {
+		cfg.MainPass = envMainPass
+	}
+	if envConfigDir := strings.TrimSpace(os.Getenv("WDTT_CONFIG_DIR")); envConfigDir != "" {
+		cfg.ConfigDir = envConfigDir
+	}
+	if envDtlsPort := strings.TrimSpace(os.Getenv("WDTT_DTLS_PORT")); envDtlsPort != "" {
+		if p, err := strconv.Atoi(envDtlsPort); err == nil && p > 0 {
+			cfg.Listen = fmt.Sprintf("0.0.0.0:%d", p)
+		}
+	}
+	if envRawPort := strings.TrimSpace(os.Getenv("WDTT_RAW_PORT")); envRawPort != "" {
+		if p, err := strconv.Atoi(envRawPort); err == nil && p > 0 {
+			cfg.RawDirectPort = p
+		}
+	}
+	return cfg
 }
 
 func (c *ServerConfig) mergeFromPanelDB() {

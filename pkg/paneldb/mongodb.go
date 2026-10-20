@@ -113,7 +113,14 @@ var (
 
 // ResolveMongoURI проверяет MONGODB_URI, файл конфигурации и fallback.
 func ResolveMongoURI() string {
+	LoadEnv()
 	if uri := os.Getenv("MONGODB_URI"); strings.TrimSpace(uri) != "" {
+		return strings.TrimSpace(uri)
+	}
+	if uri := os.Getenv("MONGO_URI"); strings.TrimSpace(uri) != "" {
+		return strings.TrimSpace(uri)
+	}
+	if uri := os.Getenv("DATABASE_URL"); strings.TrimSpace(uri) != "" {
 		return strings.TrimSpace(uri)
 	}
 	if data, err := os.ReadFile(MongoConfigFile); err == nil {
@@ -145,8 +152,11 @@ func ConnectMongo(ctx context.Context, uri string) (*MongoDB, error) {
 	}
 
 	dbName := DefaultMongoDB
-	// Извлекаем имя базы из URI если указано
-	if idx := strings.LastIndex(uri, "/"); idx != -1 {
+	if envDb := os.Getenv("MONGODB_DATABASE"); strings.TrimSpace(envDb) != "" {
+		dbName = strings.TrimSpace(envDb)
+	} else if envDb := os.Getenv("MONGO_DATABASE"); strings.TrimSpace(envDb) != "" {
+		dbName = strings.TrimSpace(envDb)
+	} else if idx := strings.LastIndex(uri, "/"); idx != -1 {
 		rest := uri[idx+1:]
 		if q := strings.Index(rest, "?"); q != -1 {
 			rest = rest[:q]

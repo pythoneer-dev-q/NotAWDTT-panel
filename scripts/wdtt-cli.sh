@@ -16,7 +16,17 @@ SERVICE_NAME="wdtt"
 CONFIG_DIR="/etc/wdtt"
 BACKUP_DIR="/etc/wdtt/backups"
 MONGO_URI_FILE="/etc/wdtt/mongodb.uri"
-PANEL_PORT=2860
+ENV_FILE="/etc/wdtt/.env"
+
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    . "$ENV_FILE" 2>/dev/null || true
+    set +a
+fi
+
+PANEL_PORT="${WDTT_PANEL_PORT:-2860}"
+DTLS_PORT="${WDTT_DTLS_PORT:-56000}"
+RAW_PORT="${WDTT_RAW_PORT:-56003}"
 
 function print_banner() {
     clear 2>/dev/null || true
@@ -55,10 +65,14 @@ function show_status() {
     fi
 
     # 2. MongoDB
+    local mongo_uri="${MONGODB_URI:-mongodb://127.0.0.1:27017/wdtt}"
+    echo -e "MongoDB URI:        ${CYAN}${mongo_uri}${NC}"
     if systemctl is-active --quiet mongod 2>/dev/null || systemctl is-active --quiet mongodb 2>/dev/null; then
-        echo -e "База данных:        ${GREEN}● MongoDB АКТИВНА${NC}"
+        echo -e "База данных:        ${GREEN}● mongod активна${NC}"
+    elif [[ "$mongo_uri" != *"127.0.0.1"* && "$mongo_uri" != *"localhost"* ]]; then
+        echo -e "База данных:        ${GREEN}● Удалённый кластер / MongoDB Atlas${NC}"
     else
-        echo -e "База данных:        ${YELLOW}○ MongoDB не найдена в systemd (проверьте mongod)${NC}"
+        echo -e "База данных:        ${YELLOW}○ Локальная mongod не запущена в systemd${NC}"
     fi
 
     # 3. Активные порты
@@ -66,8 +80,8 @@ function show_status() {
     srv_ip=$(get_public_ip)
     echo -e "Публичный IP:       ${CYAN}${srv_ip}${NC}"
     echo -e "Панель управления:  ${CYAN}http://${srv_ip}:${PANEL_PORT}/wdtt/${NC}"
-    echo -e "Порт DTLS (UDP):    ${BLUE}56000/udp${NC}"
-    echo -e "Порт RAW Direct:    ${BLUE}56003/udp${NC}"
+    echo -e "Порт DTLS (UDP):    ${BLUE}${DTLS_PORT}/udp${NC}"
+    echo -e "Порт RAW Direct:    ${BLUE}${RAW_PORT}/udp${NC}"
 
     # 4. TUN-интерфейс
     if ip link show wdtt-raw >/dev/null 2>&1; then
@@ -195,6 +209,27 @@ function reset_admin_password() {
     echo -e "Панель: ${CYAN}http://$(get_public_ip):${PANEL_PORT}/wdtt/${NC}"
 }
 
+function edit_env() {
+    local env_file="/etc/wdtt/.env"
+    if [ ! -f "$env_file" ]; then
+        if [ -f "$MONGO_URI_FILE" ]; then
+            echo "MONGODB_URI=$(cat "$MONGO_URI_FILE")" > "$env_file"
+        else
+            echo "MONGODB_URI=mongodb://127.0.0.1:27017/wdtt" > "$env_file"
+        fi
+    fi
+    local editor="${EDITOR:-nano}"
+    if ! command -v "$editor" >/dev/null 2>&1; then
+        editor="vi"
+    fi
+    "$editor" "$env_file"
+    echo ""
+    read -rp "Перезапустить службу WDTT для применения настроек? [Y/n]: " ans
+    if [[ "$ans" =~ ^[Yy]$ || "$ans" == "" ]]; then
+        restart_service
+    fi
+}
+
 function interactive_menu() {
     check_root
     while true; do
@@ -209,9 +244,10 @@ function interactive_menu() {
         echo "  7) Восстановить из резервной копии (Restore)"
         echo "  8) Сменить пароль администратора панели"
         echo "  9) Информация для входа в панель"
+        echo "  10) Редактировать конфигурацию .env (MongoDB, порты)"
         echo "  0) Выход"
         echo "─────────────────────────────────────────────────"
-        read -rp "Введите номер [0-9]: " choice
+        read -rp "Введите номер [0-10]: " choice
 
         case "$choice" in
             1) show_status; read -rp "Нажмите Enter для продолжения..." ;;
@@ -222,6 +258,7 @@ function interactive_menu() {
             6) create_backup; read -rp "Нажмите Enter для продолжения..." ;;
             7) restore_backup ""; read -rp "Нажмите Enter для продолжения..." ;;
             8) reset_admin_password; read -rp "Нажмите Enter для продолжения..." ;;
+            10) edit_env ;;
             9)
                 echo -e "\n${BOLD}Вход в веб-панель:${NC}"
                 echo -e "URL:    ${CYAN}http://$(get_public_ip):${PANEL_PORT}/wdtt/${NC}"
@@ -265,6 +302,9 @@ case "${1:-}" in
     pass|password)
         reset_admin_password
         ;;
+    env|config)
+        edit_env
+        ;;
     info)
         echo -e "Панель: http://$(get_public_ip):${PANEL_PORT}/wdtt/"
         ;;
@@ -273,6 +313,7 @@ case "${1:-}" in
         echo "Команды:"
         echo "  wdtt            - Интерактивное меню управления"
         echo "  wdtt status     - Показать текущий статус сервиса и портов"
+        echo "  wdtt env        - Редактировать настройки .env (MongoDB URI, порты)"
         echo "  wdtt restart    - Перезапустить службу"
         echo "  wdtt start      - Запустить службу"
         echo "  wdtt stop       - Остановить службу"

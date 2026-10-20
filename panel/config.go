@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -106,6 +107,23 @@ func finalizePanelConfig(cfg *PanelConfig) (*PanelConfig, error) {
 }
 
 func normalizePanelConfig(cfg *PanelConfig) {
+	if envPort := strings.TrimSpace(os.Getenv("WDTT_PANEL_PORT")); envPort != "" {
+		if p, err := strconv.Atoi(envPort); err == nil && p > 0 {
+			cfg.Port = p
+		}
+	} else if envPort := strings.TrimSpace(os.Getenv("PORT")); envPort != "" {
+		if p, err := strconv.Atoi(envPort); err == nil && p > 0 {
+			cfg.Port = p
+		}
+	}
+	if envListen := strings.TrimSpace(os.Getenv("WDTT_PANEL_LISTEN")); envListen != "" {
+		cfg.WebListen = envListen
+	}
+	if envSubPort := strings.TrimSpace(os.Getenv("WDTT_SUB_PORT")); envSubPort != "" {
+		if p, err := strconv.Atoi(envSubPort); err == nil && p > 0 {
+			cfg.SubPort = p
+		}
+	}
 	if cfg.Port == 0 {
 		cfg.Port = 2860
 	}
@@ -235,14 +253,32 @@ func normalizeRemarkModel(s string) string {
 }
 
 func createDefaultPanelConfig() (*PanelConfig, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte("wdtt"), bcrypt.DefaultCost)
+	user := "admin"
+	if envUser := strings.TrimSpace(os.Getenv("WDTT_PANEL_USER")); envUser != "" {
+		user = envUser
+	}
+	pass := "wdtt"
+	if envPass := strings.TrimSpace(os.Getenv("WDTT_PANEL_PASSWORD")); envPass != "" {
+		pass = envPass
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
+	port := 2860
+	if envPort := strings.TrimSpace(os.Getenv("WDTT_PANEL_PORT")); envPort != "" {
+		if p, err := strconv.Atoi(envPort); err == nil && p > 0 {
+			port = p
+		}
+	} else if envPort := strings.TrimSpace(os.Getenv("PORT")); envPort != "" {
+		if p, err := strconv.Atoi(envPort); err == nil && p > 0 {
+			port = p
+		}
+	}
 	cfg := &PanelConfig{
-		Username:      "admin",
+		Username:      user,
 		PasswordHash:  string(hash),
-		Port:          2860,
+		Port:          port,
 		WebBasePath:   "/wdtt/",
 		SessionKey:    randomHex(32),
 		SessionMaxAge: 60,

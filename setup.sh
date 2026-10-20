@@ -86,9 +86,31 @@ else
 fi
 
 # 3. Директории и конфиги
-echo -e "${CYAN}[3/6] Подготовка рабочих директорий...${NC}"
+echo -e "${CYAN}[3/6] Подготовка рабочих директорий и .env конфигурации...${NC}"
 mkdir -p /etc/wdtt /etc/wdtt/backups /usr/local/bin /var/log/wdtt
 echo "mongodb://127.0.0.1:27017/wdtt" > /etc/wdtt/mongodb.uri
+
+# Инициализация /etc/wdtt/.env если его нет
+if [ ! -f /etc/wdtt/.env ]; then
+    echo " -> Создание файла конфигурации /etc/wdtt/.env..."
+    if [ -f "${SCRIPT_DIR}/.env" ]; then
+        cp "${SCRIPT_DIR}/.env" /etc/wdtt/.env
+    elif [ -f "${SCRIPT_DIR}/.env.example" ]; then
+        cp "${SCRIPT_DIR}/.env.example" /etc/wdtt/.env
+    else
+        cat << 'EOF' > /etc/wdtt/.env
+MONGODB_URI=mongodb://127.0.0.1:27017/wdtt
+MONGODB_DATABASE=wdtt
+WDTT_PANEL_PORT=2860
+WDTT_PANEL_LISTEN=0.0.0.0
+WDTT_DTLS_PORT=56000
+WDTT_RAW_PORT=56003
+WDTT_SUB_PORT=2096
+WDTT_CONFIG_DIR=/etc/wdtt
+EOF
+    fi
+    chmod 600 /etc/wdtt/.env 2>/dev/null || true
+fi
 
 # 4. Сборка / установка бинарника WDTT
 echo -e "${CYAN}[4/6] Сборка и установка бинарника WDTT...${NC}"
@@ -130,13 +152,14 @@ echo -e "${CYAN}[5/6] Создание службы systemd...${NC}"
 cat << 'EOF' > /etc/systemd/system/wdtt.service
 [Unit]
 Description=WDTT Unified VPN and Web Panel (RAW & UDP)
-After=network.target mongod.service
+After=network.target
 Wants=mongod.service
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/etc/wdtt
+EnvironmentFile=-/etc/wdtt/.env
 ExecStart=/usr/local/bin/wdtt-app -config-dir /etc/wdtt
 ExecStartPost=-/usr/local/bin/wdtt-xray-rules.sh up
 Restart=always

@@ -66,17 +66,11 @@ func trafficUsed(entry *PasswordEntry) int64 {
 }
 
 func trafficExceeded(entry *PasswordEntry) bool {
-	if entry == nil || entry.TotalBytes <= 0 {
-		return false
-	}
-	return (entry.UpBytes + entry.DownBytes) >= entry.TotalBytes
+	return false // Все лимиты трафика вырезаны
 }
 
 func isPasswordExpired(entry *PasswordEntry) bool {
-	if entry == nil || entry.ExpiresAt <= 0 {
-		return false
-	}
-	return time.Now().Unix() > entry.ExpiresAt
+	return false // Все лимиты срока действия вырезаны
 }
 
 func countActivePasswords(db *PasswordsDB) int {

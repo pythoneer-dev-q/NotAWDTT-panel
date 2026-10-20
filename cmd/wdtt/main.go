@@ -42,10 +42,10 @@ func main() {
 	if nodeSync != "" && nodeToken != "" {
 		noPanel = true
 		server.StartNodeSyncWorker(context.Background(), nodeSync, nodeToken)
-	}
-
-	if err := panel.BootstrapDB(); err != nil {
-		log.Fatalf("[PANEL] bootstrap: %v", err)
+	} else {
+		if err := panel.BootstrapDB(); err != nil {
+			log.Fatalf("[PANEL] bootstrap: %v", err)
+		}
 	}
 
 	if !noPanel {

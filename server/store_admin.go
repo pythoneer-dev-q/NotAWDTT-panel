@@ -195,9 +195,7 @@ func applyPanelUserUpdateLocked(wgDev *device.Device, req panelUserUpdateReq, ma
 		savePass = newPassword
 	}
 	db.Passwords[savePass] = &entry
-	if len(entry.DeviceIDs) > entryMaxDevices(&entry) && savePass != db.MainPassword {
-		return fmt.Errorf("привязано %d устройств — лимит %d, сначала отвяжите лишние", len(entry.DeviceIDs), entryMaxDevices(&entry))
-	}
+	// Лимит устройств снят
 	// UI always sends device_ids → manageDevices=true. Password rename must still
 	// RenameUserPassword + refresh WRAP; finalize alone only Upserts the new key.
 	if newPassword != oldPassword {

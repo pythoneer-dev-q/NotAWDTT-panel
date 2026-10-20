@@ -59,6 +59,7 @@ func inboundAPIPayload(a *App, cfg WdttInboundConfig) map[string]interface{} {
 		"wg_keepalive_sec":      cfg.WgKeepaliveSec,
 		"stats_interval_sec":    cfg.StatsIntervalSec,
 		"admin_addr":            cfg.AdminAddr,
+		"wg_enable":             cfg.WgEnable,
 		"raw_enable":            cfg.RawEnable,
 		"raw_direct_port":       cfg.EffectiveRawDirectPort(),
 		"raw_subnet":            "10.70.0.0/16",
@@ -133,6 +134,13 @@ func (a *App) handleInboundSave(w http.ResponseWriter, r *http.Request) {
 	if !bytes.Contains(body, []byte(`"raw_direct_port"`)) {
 		if old, err := loadWdttInbound(); err == nil {
 			req.RawDirectPort = old.RawDirectPort
+		}
+	}
+	if !bytes.Contains(body, []byte(`"wg_enable"`)) {
+		if old, err := loadWdttInbound(); err == nil {
+			req.WgEnable = old.WgEnable
+		} else {
+			req.WgEnable = true
 		}
 	}
 	restarted, err := applyWdttInbound(req)

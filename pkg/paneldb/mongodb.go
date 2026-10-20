@@ -66,6 +66,7 @@ type MongoInboundDoc struct {
 	AdminAddr           string `bson:"admin_addr" json:"admin_addr"`
 	RawEnable           bool   `bson:"raw_enable" json:"raw_enable"`
 	RawDirectPort       int    `bson:"raw_direct_port" json:"raw_direct_port"`
+	WgEnable            bool   `bson:"wg_enable" json:"wg_enable"`
 }
 
 type MongoUserDoc struct {
@@ -591,6 +592,7 @@ func (m *MongoDB) LoadInbound(ctx context.Context) (*Inbound, error) {
 			AdminAddr:           "127.0.0.1:2861",
 			RawEnable:           true,
 			RawDirectPort:       56003,
+			WgEnable:            true,
 		}
 		_ = m.SaveInbound(ctx, in)
 		return in, nil
@@ -615,6 +617,7 @@ func (m *MongoDB) LoadInbound(ctx context.Context) (*Inbound, error) {
 		AdminAddr:           doc.AdminAddr,
 		RawEnable:           doc.RawEnable,
 		RawDirectPort:       doc.RawDirectPort,
+		WgEnable:            doc.WgEnable,
 	}, nil
 }
 
@@ -643,6 +646,7 @@ func (m *MongoDB) SaveInbound(ctx context.Context, in *Inbound) error {
 		AdminAddr:           in.AdminAddr,
 		RawEnable:           in.RawEnable,
 		RawDirectPort:       in.RawDirectPort,
+		WgEnable:            in.WgEnable,
 	}
 	_, err := m.db.Collection("inbound").UpdateOne(ctx,
 		bson.M{"_id": 1},
@@ -664,6 +668,7 @@ func (m *MongoDB) LoadStartupSettings(ctx context.Context) (StartupSettings, boo
 		RawDirectPort: in.RawDirectPort,
 		AdminAddr:     in.AdminAddr,
 		Enable:        in.Enable,
+		WgEnable:      in.WgEnable,
 		RuntimeSettings: RuntimeSettings{
 			DNS:                 in.DNS,
 			MTU:                 in.MTU,
@@ -674,6 +679,7 @@ func (m *MongoDB) LoadStartupSettings(ctx context.Context) (StartupSettings, boo
 			WgKeepaliveSec:      in.WgKeepaliveSec,
 			StatsIntervalSec:    in.StatsIntervalSec,
 			RawEnable:           in.RawEnable,
+			WgEnable:            in.WgEnable,
 		},
 	}
 	return s, true, nil

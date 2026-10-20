@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -324,6 +325,26 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]bool{"ok": true})
 }
 
+// handleNodeBinary — отдаёт скомпилированный бинарник WDTT для подключаемых VPS-нод
+func (a *App) handleNodeBinary(w http.ResponseWriter, r *http.Request) {
+	candidates := []string{
+		"/usr/local/bin/wdtt-app",
+		"/usr/local/bin/wdtt",
+		"/etc/wdtt/bin/wdtt",
+		"wdtt-linux-amd64",
+		os.Args[0],
+	}
+	for _, p := range candidates {
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Size() > 500000 {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Content-Disposition", "attachment; filename=\"wdtt\"")
+			http.ServeFile(w, r, p)
+			return
+		}
+	}
+	http.Error(w, "binary not available", http.StatusNotFound)
+}
+
 // handleNodeInstallScript — возвращает скрипт подключения для нового VPS
 func (a *App) handleNodeInstallScript(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
@@ -345,11 +366,12 @@ NODE_ID="%s"
 MASTER_URL="http://%s%spanel/api"
 
 echo "[1/4] Обновление пакетов и установка зависимостей..."
-apt-get update -y && apt-get install -y curl iptables tar
+apt-get update -y && apt-get install -y curl iptables tar ca-certificates
 
 echo "[2/4] Загрузка бинарника WDTT..."
 mkdir -p /etc/wdtt /usr/local/bin
-curl -fsSL "http://%s%sweb/assets/bin/wdtt" -o /usr/local/bin/wdtt 2>/dev/null || true
+curl -fsSL "${MASTER_URL}/node/binary" -o /usr/local/bin/wdtt || curl -fsSL "http://%s%sweb/assets/bin/wdtt" -o /usr/local/bin/wdtt || true
+chmod +x /usr/local/bin/wdtt
 
 echo "[3/4] Создание конфигурации ноды..."
 cat <<EOF > /etc/wdtt/node.conf
@@ -370,6 +392,7 @@ ExecStart=/usr/local/bin/wdtt -no-panel -node-sync ${MASTER_URL} -node-token ${N
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
 
 [Install]
 WantedBy=multi-user.target

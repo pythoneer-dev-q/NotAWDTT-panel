@@ -26,7 +26,8 @@ CREATE TABLE wdtt_inbound (
 	stats_interval_sec INTEGER NOT NULL DEFAULT 2,
 	admin_addr TEXT NOT NULL DEFAULT '127.0.0.1:2861',
 	raw_enable INTEGER NOT NULL DEFAULT 1,
-	raw_direct_port INTEGER NOT NULL DEFAULT 0
+	raw_direct_port INTEGER NOT NULL DEFAULT 0,
+	wg_enable INTEGER NOT NULL DEFAULT 1
 );
 `
 

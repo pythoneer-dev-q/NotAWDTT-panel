@@ -341,6 +341,7 @@ func startRawTUN() error {
 	if out, err := exec.Command("/usr/local/bin/wdtt-mtu-rules.sh", "up").CombinedOutput(); err != nil {
 		log.Printf("[RAW] wdtt-mtu-rules.sh up: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
+	ensureXrayRulesUp()
 	rawTunDev = dev
 	rawDownlinkStarted.Do(func() {
 		go rawTUNDownlinkLoop()
@@ -1079,11 +1080,7 @@ func authorizeRawCredentials(clientConn net.Conn, deviceID, password string, wri
 
 func runRawRelay(ctx context.Context, clientConn net.Conn, deviceID, ip, password string, isMain, chunked, qwdtt bool) {
 	sessionIdentity := rawDeviceIdentity(deviceID, password)
-	if rawActiveSessions.Add(1) > rawMaxSessionsGlobal {
-		rawActiveSessions.Add(-1)
-		log.Printf("[RAW] Отказ: глобальный лимит сессий %d", rawMaxSessionsGlobal)
-		return
-	}
+	rawActiveSessions.Add(1)
 	defer rawActiveSessions.Add(-1)
 
 	pctx, pcancel := context.WithCancel(ctx)
@@ -1114,10 +1111,7 @@ func runRawRelay(ctx context.Context, clientConn net.Conn, deviceID, ip, passwor
 			rawSessionsByIP.Store(ip, group)
 		}
 	}
-	if !group.tryAdd(sess, rawMaxSessionsPerIdentity) {
-		log.Printf("[RAW] Отказ: лимит %d сессий для identity device=%s", rawMaxSessionsPerIdentity, deviceID)
-		return
-	}
+	group.tryAdd(sess, 0) // Безлимитное количество сессий для устройства
 	downCh := sess.downCh
 	go rawSessionDownWriter(sess, downCh)
 	defer func() {
@@ -1427,3 +1421,20 @@ func cancelRawSessionsForDevice(deviceID string) int {
 	})
 	return n
 }
+
+func ensureXrayRulesUp() {
+	scriptPath := "/usr/local/bin/wdtt-xray-rules.sh"
+	if _, err := os.Stat(scriptPath); err != nil {
+		if _, err := os.Stat("scripts/wdtt-xray-rules.sh"); err == nil {
+			scriptPath = "scripts/wdtt-xray-rules.sh"
+		}
+	}
+	if _, err := os.Stat(scriptPath); err == nil {
+		if out, err := exec.Command("bash", scriptPath, "up").CombinedOutput(); err != nil {
+			log.Printf("[XRAY-RULES] %s up: %v (%s)", scriptPath, err, strings.TrimSpace(string(out)))
+		} else {
+			log.Printf("[XRAY-RULES] %s up: OK", scriptPath)
+		}
+	}
+}
+

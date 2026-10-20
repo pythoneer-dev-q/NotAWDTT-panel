@@ -27,6 +27,7 @@ func BootstrapDB() error {
 
 		ensureLegacySettingsImported()
 		ensureDefaultWdttData()
+		go refreshTunnelLocalServiceRules()
 	})
 	return bootstrapErr
 }

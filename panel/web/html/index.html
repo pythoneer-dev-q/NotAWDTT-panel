@@ -190,138 +190,71 @@
                 </a-card>
               </a-col>
               <a-col :xs="24" :sm="24" :lg="12">
-                <a-card hoverable>
-                  <template #title>
-                    <a-space direction="horizontal">
-                      <span>{{ i18n "pages.index.xrayStatus" }}</span>
-                      <a-tag v-if="isMobile && status.xray.version != 'Unknown'" color="green"
-                        class="cursor-pointer" @click="openSelectV2rayVersion">
-                        v[[ status.xray.version ]]
-                      </a-tag>
-                    </a-space>
-                  </template>
-                  <template #extra>
-                    <template v-if="status.xray.state != 'error'">
-                      <a-badge status="processing"
-                        :class="({ green: 'xray-running-animation', orange: 'xray-stop-animation' }[status.xray.color]) || 'xray-processing-animation'"
-                        :text="status.xray.stateMsg" :color="status.xray.color" />
-                    </template>
-                    <template v-else>
-                      <a-popover :overlay-class-name="themeSwitcher.currentTheme">
-                        <span slot="title">
-                          <a-row type="flex" align="middle" justify="space-between">
-                            <a-col>
-                              <span>{{ i18n "pages.index.xrayErrorPopoverTitle" }}</span>
-                            </a-col>
-                            <a-col>
-                              <a-icon type="bars" class="cursor-pointer float-right" @click="openLogs()"></a-icon>
-                            </a-col>
-                          </a-row>
-                        </span>
-                        <template slot="content">
-                          <span class="max-w-400" v-for="line in (status.xray.errorMsg || '').split('\n')">[[ line ]]</span>
-                        </template>
-                        <a-badge :text="status.xray.stateMsg" :color="status.xray.color"
-                          :class="status.xray.color === 'red' ? 'xray-error-animation' : ''" />
-                      </a-popover>
-                    </template>
-                  </template>
-                  <template #actions>
-                    <a-space direction="horizontal" @click="openXrayLogs()" class="jc-center">
-                      <a-icon type="bars"></a-icon>
-                      <span v-if="!isMobile">{{ i18n "pages.index.logs" }}</span>
-                    </a-space>
-                    <a-space direction="horizontal" @click="stopXrayService" class="jc-center">
-                      <a-icon type="poweroff"></a-icon>
-                      <span v-if="!isMobile">{{ i18n "pages.index.stopXray" }}</span>
-                    </a-space>
-                    <a-space direction="horizontal" @click="restartXrayService" class="jc-center">
-                      <a-icon type="reload"></a-icon>
-                      <span v-if="!isMobile">{{ i18n "pages.index.restartXray" }}</span>
-                    </a-space>
-                    <a-space direction="horizontal" @click="openSelectV2rayVersion" class="jc-center cursor-pointer">
-                      <a-icon type="tool"></a-icon>
-                      <span v-if="!isMobile">
-                        [[ status.xray.version != 'Unknown' ? `v${status.xray.version}` : '{{ i18n "pages.index.xraySwitch" }}' ]]
-                      </span>
-                    </a-space>
-                  </template>
-                </a-card>
-              </a-col>
-              <a-col :xs="24" :sm="24" :lg="12">
-                <a-card title='{{ i18n "menu.link" }}' hoverable>
-                  <template #actions>
-                    <a-space direction="horizontal" @click="openLogs()" class="jc-center">
-                      <a-icon type="bars"></a-icon>
-                      <span v-if="!isMobile">{{ i18n "pages.index.logs" }}</span>
-                    </a-space>
-                    <a-space direction="horizontal" @click="openConfig" class="jc-center">
-                      <a-icon type="control"></a-icon>
-                      <span v-if="!isMobile">{{ i18n "pages.index.config" }}</span>
-                    </a-space>
-                    <a-space direction="horizontal" @click="openSelectPanelVersion" class="jc-center cursor-pointer">
-                      <a-icon type="cloud-download"></a-icon>
-                      <span v-if="!isMobile">{{ i18n "menu.panelUpdate" }}</span>
-                    </a-space>
-                  </template>
-                </a-card>
-              </a-col>
-              <a-col :xs="24" :sm="24" :lg="12">
-                <a-card hoverable class="wdtt-card action-card">
+                <a-card hoverable class="wdtt-card">
                   <template #title>
                     <div class="wdtt-head">
-                      <span class="wdtt-brand">WDTT</span>
+                      <span class="wdtt-brand">WDTT Core (RAW & UDP)</span>
                       <div class="wdtt-tags">
-                        <a-tag color="blue" title="Онлайн (WG + RAW)">Онлайн: [[ status.wdtt.activeUsers ]]</a-tag>
-                        <a-tag color="cyan" title="DTLS / WireGuard сессии">WDTT: [[ Math.max(0, (status.wdtt.sessions || 0) - (status.wdtt.rawSessions || 0)) ]]</a-tag>
-                        <a-tag color="orange" title="Сколько клиентов сейчас в режиме RAW (не настройка; 0 = никто не подключён в RAW)">RAW: [[ status.wdtt.rawSessions || 0 ]]</a-tag>
-                        <a-tag color="purple">[[ status.wdtt.ifaceShort ]]</a-tag>
+                        <a-tag color="blue">Пользователи: [[ status.wdtt.activeUsers ]]</a-tag>
+                        <a-tag color="orange">RAW сессии: [[ status.wdtt.rawSessions || 0 ]]</a-tag>
+                        <a-tag color="cyan">UDP сессии: [[ Math.max(0, (status.wdtt.sessions || 0) - (status.wdtt.rawSessions || 0)) ]]</a-tag>
+                        <a-tag color="purple">Интерфейс: [[ status.wdtt.ifaceShort || 'wdtt-raw' ]]</a-tag>
                       </div>
                     </div>
                   </template>
                   <template #extra>
                     <a-badge :status="status.wdtt.color === 'green' ? 'processing' : 'default'"
-                      :text="status.wdtt.stateMsg" :color="status.wdtt.color" />
+                      :text="status.wdtt.stateMsg || 'Активен'" :color="status.wdtt.color || 'green'" />
                   </template>
                   <template #actions>
                     <a-space direction="horizontal" @click="openWdttJournal()" class="jc-center">
                       <a-icon type="bars"></a-icon>
-                      <span v-if="!isMobile">{{ i18n "pages.index.logs" }}</span>
+                      <span v-if="!isMobile">Журнал VPN</span>
                     </a-space>
                     <a-space direction="horizontal" @click="restartWdttService" class="jc-center">
                       <a-icon type="reload"></a-icon>
                       <span v-if="!isMobile">Перезапуск VPN</span>
                     </a-space>
+                    <a-space direction="horizontal" @click="openUsers" class="jc-center">
+                      <a-icon type="team"></a-icon>
+                      <span v-if="!isMobile">Пользователи</span>
+                    </a-space>
                   </template>
                 </a-card>
               </a-col>
+
               <a-col :xs="24" :sm="24" :lg="12">
-                <a-card title='WDTT Panel' hoverable :body-style="{ padding: '12px 24px' }">
-                  <a rel="noopener" href="https://github.com/ildarmaga/wdtt/releases" target="_blank">
-                    <a-tag color="green"><span>v{{ .cur_ver }}</span></a-tag>
-                  </a>
-                  <a-tag color="purple" @click="openXraySettings" style="cursor:pointer">
-                    <span>{{ i18n "menu.xray" }}</span>
-                  </a-tag>
-                  <a-tag color="blue" @click="openUsers" style="cursor:pointer">
-                    <span>Пользователи</span>
-                  </a-tag>
+                <a-card hoverable title="Кластер VPS-нод и MongoDB">
+                  <template #extra>
+                    <a-tag color="green"><a-badge status="processing" style="margin-right:4px;" />MongoDB v8.0</a-tag>
+                  </template>
+                  <div style="display:flex; justify-content:space-around; align-items:center; padding:16px 0;">
+                    <div style="text-align:center;">
+                      <div style="font-size:12px; color:#888;">VPS-ноды</div>
+                      <div style="font-size:20px; font-weight:700; color:#10b981;">Кластер активен</div>
+                    </div>
+                    <div style="text-align:center;">
+                      <div style="font-size:12px; color:#888;">База данных</div>
+                      <div style="font-size:20px; font-weight:700; color:#6366f1;">MongoDB</div>
+                    </div>
+                    <div style="text-align:center;">
+                      <div style="font-size:12px; color:#888;">Лимиты</div>
+                      <div style="font-size:20px; font-weight:700; color:#f59e0b;">Безлимит (∞)</div>
+                    </div>
+                  </div>
+                  <template #actions>
+                    <a-space direction="horizontal" @click="location.href = basePath + 'panel/nodes'" class="jc-center">
+                      <a-icon type="cloud-server"></a-icon>
+                      <span v-if="!isMobile">Управление нодами (VPS)</span>
+                    </a-space>
+                    <a-space direction="horizontal" @click="openLogs()" class="jc-center">
+                      <a-icon type="file-text"></a-icon>
+                      <span v-if="!isMobile">Логи панели</span>
+                    </a-space>
+                  </template>
                 </a-card>
               </a-col>
-              <a-col :xs="24" :sm="24" :lg="12">
-                <a-card title='{{ i18n "pages.index.operationHours" }}' hoverable>
-                  <a-tag :color="status.xray.color">Xray: [[ TimeFormatter.formatSecond(status.xray.uptime) ]]</a-tag>
-                  <a-tag :color="status.wdtt.color">WDTT-PANEL: [[ TimeFormatter.formatSecond(status.wdtt.uptime) ]]</a-tag>
-                  <a-tag :color="status.wdttServerColor">WDTT-SERVER: [[ TimeFormatter.formatSecond(status.wdtt.serverUptime) ]]</a-tag>
-                  <a-tag color="green">OS: [[ TimeFormatter.formatSecond(status.uptime) ]]</a-tag>
-                </a-card>
-              </a-col>
-              <a-col :xs="24" :sm="24" :lg="12">
-                <a-card title='{{ i18n "usage"}}' hoverable>
-                  <a-tag color="green">Xray: [[ SizeFormatter.sizeFormat(status.appStats.xray.mem) ]]</a-tag>
-                  <a-tag color="green">WDTT: [[ SizeFormatter.sizeFormat(status.appStats.wdtt.mem) ]]</a-tag>
-                </a-card>
-              </a-col>
+
               <a-col :xs="24" :sm="24" :lg="12">
                 <a-card title='{{ i18n "pages.index.overallSpeed" }}' hoverable>
                   <a-row :gutter="isMobile ? [8,8] : 0">

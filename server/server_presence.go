@@ -265,10 +265,7 @@ func userSessionEnter(deviceID, ip, label, password string) bool {
 		info = &onlineUserInfo{Label: label, Password: password, IP: ip, LastActivity: now}
 		onlineUsers[deviceID] = info
 	}
-	if maxDTLSPerDevice > 0 && info.Sessions >= int(maxDTLSPerDevice) {
-		onlineUsersMutex.Unlock()
-		return false
-	}
+	// Лимит сессий на устройство снят
 	wasOnline := info.Sessions > 0
 	info.Sessions++
 	info.LastActivity = now

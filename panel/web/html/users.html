@@ -58,7 +58,7 @@
                       <a-radio-button value="all">Все ([[ users.length ]])</a-radio-button>
                       <a-radio-button value="active">Активные ([[ activeCount ]])</a-radio-button>
                       <a-radio-button value="blocked">Блок ([[ blockedCount ]])</a-radio-button>
-                      <a-radio-button value="expired">Истёкшие ([[ expiredCount ]])</a-radio-button>
+                      
                     </a-radio-group>
                     <a-input-search v-model="searchQuery" placeholder="Поиск (пароль, имя, устр)..." style="width:230px" allow-clear size="small"></a-input-search>
                   </div>
@@ -73,9 +73,7 @@
                         <div class="text-muted" style="font-size:12px;margin-top:2px">[[ row.comment || '—' ]]</div>
                       </div>
                       <div class="user-mobile-status">
-                        <a-tag v-if="row.traffic_exceeded" color="purple">лимит</a-tag>
-                        <a-tag v-else-if="row.is_expired" color="orange">истёк</a-tag>
-                        <a-tag v-else-if="row.is_deactivated" color="red">блокирован</a-tag>
+                        <a-tag v-if="row.is_deactivated" color="red">блокирован</a-tag>
                         <a-tag v-else color="green">активен</a-tag>
                         <a-tag v-if="row.online" color="green">{{ i18n "online" }}</a-tag>
                         <a-tag v-else>{{ i18n "offline" }}</a-tag>
@@ -85,7 +83,7 @@
                       <div><span class="user-mobile-label">VK_HASH</span><code v-if="row.vk_hash">[[ formatVkHashCell(row.vk_hash) ]]</code><span v-else class="text-muted">—</span></div>
                       <div><span class="user-mobile-label">Устройства</span>
                         <span v-if="row.is_main">[[ row.device_id || '—' ]] <span v-if="row.devices_bound" class="text-muted">([[ row.devices_bound ]])</span></span>
-                        <span v-else>[[ row.devices_bound || 0 ]]/[[ row.max_devices || 1 ]]</span>
+                        <span v-else>[[ row.devices_bound || 0 ]] устр. (без лимита)</span>
                       </div>
                       <div><span class="user-mobile-label">Срок</span>[[ row.expires || 'бессрочно' ]]</div>
                       <div class="user-mobile-span2"><span class="user-mobile-label">Трафик</span>
@@ -121,7 +119,7 @@
                       <span v-if="row.devices_bound" class="text-muted" style="font-size:11px"> ([[ row.devices_bound ]] устр.)</span>
                     </span>
                     <span v-else>
-                      <a-tag color="blue">[[ row.devices_bound || 0 ]]/[[ row.max_devices || 1 ]]</a-tag>
+                      <a-tag color="blue">[[ row.devices_bound || 0 ]] устр. (без лимита)</a-tag>
                       <div v-if="row.device_id" class="text-muted" style="font-size:11px;margin-top:2px">[[ row.device_id ]]</div>
                     </span>
                   </span>

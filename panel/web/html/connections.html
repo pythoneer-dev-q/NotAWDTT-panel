@@ -70,6 +70,7 @@
                       <a-tooltip title="RAW UDP прямой порт (высокая скорость)">
                         <a-tag color="orange" :style="{ margin: 0 }">RAW [[ row.raw_direct_port || ((Number(row.dtls_port)||56000)+3) ]]</a-tag>
                       </a-tooltip>
+                      
                     </span>
                   </template>
                   <template slot="wdttProtocol" slot-scope="_, row">
@@ -79,6 +80,7 @@
                       <a-tooltip :title="'IP RAW · UDP ' + (row.raw_direct_port || ((Number(row.dtls_port)||56000)+3)) + ' · ' + (row.raw_subnet || '10.70.0.0/16') + (row.raw_sessions ? (' · сессий ' + row.raw_sessions) : '')">
                         <a-tag color="orange" :style="{ margin: 0 }">RAW[[ row.raw_sessions ? (' · ' + row.raw_sessions) : '' ]]</a-tag>
                       </a-tooltip>
+                      
                     </span>
                   </template>
                   <template slot="wdttUsers" slot-scope="_, row">
@@ -94,101 +96,7 @@
                 </a-table>
               </a-card>
 
-              <a-card title='{{ i18n "pages.inbounds.title" }}' hoverable>
-                <template #extra>
-                  <a-button-group>
-                    <a-button icon="sync" @click="manualRefresh" :loading="refreshing"></a-button>
-                    <a-popover placement="bottomRight" trigger="click" :overlay-class-name="themeSwitcher.currentTheme">
-                      <template #title>
-                        <div class="ant-custom-popover-title">
-                          <a-switch v-model="isRefreshEnabled" @change="toggleRefresh" size="small"></a-switch>
-                          <span>{{ i18n "pages.inbounds.autoRefresh" }}</span>
-                        </div>
-                      </template>
-                      <template #content>
-                        <a-space direction="vertical">
-                          <span>{{ i18n "pages.inbounds.autoRefreshInterval" }}</span>
-                          <a-select v-model="refreshInterval" :disabled="!isRefreshEnabled" :style="{ width: '100%' }"
-                            @change="changeRefreshInterval" :dropdown-class-name="themeSwitcher.currentTheme">
-                            <a-select-option v-for="key in [5,10,30,60]" :value="key*1000">[[ key ]]s</a-select-option>
-                          </a-select>
-                        </a-space>
-                      </template>
-                      <a-button icon="down"></a-button>
-                    </a-popover>
-                  </a-button-group>
-                </template>
-
-                <a-row :gutter="[8, 8]" style="margin-bottom:12px">
-                  <a-col :span="24">
-                    <div class="conn-mobile-toolbar" :class="{ 'conn-mobile-toolbar--row': !isMobile }">
-                      <a-button type="primary" icon="plus" :block="isMobile" @click="openXrayCreate">
-                        {{ i18n "pages.inbounds.addInbound" }}
-                      </a-button>
-                      <a-button icon="eye" :block="isMobile" @click="openFirewallPorts">
-                        Посмотреть порты
-                      </a-button>
-                      <a-input-search v-model="searchText" placeholder="Поиск..." allow-clear
-                        :style="isMobile ? { width: '100%' } : { maxWidth: '280px', marginLeft: 'auto' }"></a-input-search>
-                    </div>
-                  </a-col>
-                </a-row>
-
-                <div v-if="isMobile" class="conn-mobile-list">
-                  <div v-if="!filteredXrayRows.length" class="text-muted" style="padding:8px 0">Нет подключений</div>
-                  <div v-for="row in filteredXrayRows" :key="row.tag" class="conn-mobile-card">
-                    <div class="conn-mobile-head">
-                      <div>
-                        <div class="conn-mobile-title">[[ row.remark || row.tag ]]</div>
-                        <div class="conn-mobile-tags">
-                          <a-tag color="purple">[[ row.protocol ]]</a-tag>
-                          <a-tag color="blue">порт [[ row.port ]]</a-tag>
-                        </div>
-                      </div>
-                      <a-switch :checked="row.enable" :loading="row.toggling"
-                        @change="checked => toggleXrayEnable(row, checked)"></a-switch>
-                    </div>
-                    <div class="conn-mobile-actions">
-                      <a-button size="small" icon="edit" @click="openXrayEdit(row)">Изменить</a-button>
-                      <a-button size="small" type="danger" icon="delete" @click="deleteXrayInbound(row)">Удалить</a-button>
-                    </div>
-                  </div>
-                </div>
-                <a-table v-else :columns="xrayCols" :data-source="filteredXrayRows" :pagination="false"
-                  :row-key="row => row.tag" bordered size="middle"
-                  :locale='{ filterConfirm: `{{ i18n "confirm" }}`, filterReset: `{{ i18n "reset" }}` }'>
-                  <template slot="xrayOperate" slot-scope="_, row">
-                    <a-dropdown :trigger="['click']">
-                      <a-icon @click="e => e.preventDefault()" type="more"
-                        :style="{ fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' }"></a-icon>
-                      <a-menu slot="overlay" :theme="themeSwitcher.currentTheme">
-                        <a-menu-item @click="openXrayEdit(row)">
-                          <a-icon type="edit"></a-icon>
-                          <span>{{ i18n "pages.inbounds.modifyInbound" }}</span>
-                        </a-menu-item>
-                        <a-menu-item @click="deleteXrayInbound(row)">
-                          <a-icon type="delete"></a-icon>
-                          <span>{{ i18n "delete" }}</span>
-                        </a-menu-item>
-                      </a-menu>
-                    </a-dropdown>
-                  </template>
-                  <template slot="xrayEnable" slot-scope="_, row">
-                    <a-switch :checked="row.enable" :loading="row.toggling"
-                      @change="checked => toggleXrayEnable(row, checked)"></a-switch>
-                  </template>
-                  <template slot="xrayRemark" slot-scope="_, row">[[ row.remark || row.tag ]]</template>
-                  <template slot="xrayPort" slot-scope="_, row">
-                    <a-tag color="blue" :style="{ margin: 0 }">[[ row.port ]]</a-tag>
-                  </template>
-                  <template slot="xrayProtocol" slot-scope="_, row">
-                    <a-tag color="purple" :style="{ margin: 0 }">[[ row.protocol ]]</a-tag>
-                  </template>
-                  <template slot="xrayTraffic" slot-scope="_, row">
-                    <a-tag color="green" style="margin:0">∞</a-tag>
-                  </template>
-                </a-table>
-              </a-card>
+              
             </a-col>
           </a-row>
         </transition>
@@ -315,6 +223,7 @@
       this.listen_host = data.listen_host || '0.0.0.0';
       this.server_host = data.server_host || '';
       this.dtls_port = Number(data.dtls_port) || 56000;
+      this.wg_enable = data.wg_enable !== false;
       this.wg_port = Number(data.wg_port) || 56001;
       this.client_port = Number(data.client_port) || 9000;
       this.dns = data.dns || '1.1.1.1';
@@ -351,6 +260,7 @@
         listen_host: this.listen_host,
         server_host: this.server_host,
         dtls_port: Number(this.dtls_port),
+        wg_enable: this.wg_enable !== false,
         wg_port: Number(this.wg_port),
         client_port: Number(this.client_port),
         dns: this.dns,

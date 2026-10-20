@@ -69,22 +69,17 @@ func handleConn(ctx context.Context, clientConn net.Conn, wgEndpoint string, wgD
 	firstPacket := buf[:n]
 	firstStr := string(firstPacket)
 
-	// Режим WireGuard вырезан: работаем только через RAW и UDP (DTLS/RAW direct)
 	if isRawConfPacket(firstStr) {
 		handleRawConf(ctx, clientConn, firstStr, wrapAuthPass)
 		return
 	}
 
 	if strings.HasPrefix(firstStr, "GETCONF:") {
-		// Адаптируем legacy GETCONF запрос к формату RAWCONF
-		handleRawConf(ctx, clientConn, "RAWCONF:"+strings.TrimPrefix(firstStr, "GETCONF:"), wrapAuthPass)
-		return
-	}
-
-	handleRawConf(ctx, clientConn, firstStr, wrapAuthPass)
-	return
-
-	if strings.HasPrefix(firstStr, "GETCONF:") {
+		if wgDev == nil || wgEndpoint == "" || keys == nil {
+			clientConn.Write([]byte("DENIED:wireguard_disabled\n"))
+			log.Printf("[WG] Отказ: WireGuard режим отключен на сервере (%s)", clientConn.RemoteAddr())
+			return
+		}
 		parts := strings.Split(strings.TrimSpace(strings.TrimPrefix(firstStr, "GETCONF:")), "|")
 		clientPort := "9000"
 		deviceID := "unknown"
@@ -245,6 +240,11 @@ func handleConn(ctx context.Context, clientConn net.Conn, wgEndpoint string, wgD
 		}
 		clientConn.SetReadDeadline(time.Time{})
 		firstPacket = buf[:n]
+	}
+
+	if wgDev == nil || wgEndpoint == "" {
+		log.Printf("[SERVER] WireGuard отключен, сессия от %s завершена", clientConn.RemoteAddr())
+		return
 	}
 
 	// WG прокси

@@ -47,7 +47,22 @@
 ### CLI и скрипты автоматизации
 - `setup.sh`: скрипт быстрой автоматической установки панели, демона WDTT и MongoDB.
 - `scripts/wdtt-cli.sh`: системная утилита командной строки с глобальным алиасом `wdtt` (`wdtt status`, `wdtt backup`, `wdtt restore`, `wdtt restart`, `wdtt log`).
-- Удаление устаревшего standalone WG режима в пользу высокопроизводительных RAW UDP и TURN датаплейнов.
+
+### Защита от утечек трафика и правила Xray (TPROXY / DNS DNAT)
+- **`scripts/wdtt-xray-rules.sh`**:
+  - Автоматическое создание цепочек `XRAY_REDIRECT` и `XRAY_TPROXY` для обоих интерфейсов (`wdtt0` и `wdtt-raw`).
+  - Перенаправление DNS-запросов (`-p udp --dport 53 -j DNAT --to-destination ${DNS_IP}:53`).
+  - Защита внутреннего UDP-трафика через TPROXY (`mangle XRAY_TPROXY`, `fwmark 0x66`, таблица 166).
+  - Внешний транспорт CSQTT/RAW на WAN не затрагивается TPROXY.
+  - Устранена ошибка canary leak (`exit status 2`).
+  - Автоматический запуск скрипта при старте сервиса через systemd `ExecStartPost`, при поднятии TUN и в `setup.sh`.
+
+### Управление режимом WireGuard (`wg_enable`)
+- Добавлен переключатель включения/отключения WireGuard (`wdtt0`):
+  - В модальном окне Inbound панели (`wdtt_inbound_modal.html`) с динамическим отображением порта.
+  - В REST API, MongoDB и SQLite схеме (`paneldb.Inbound.WgEnable`).
+  - При отключении: `wdtt0` не создается, фоновый WG не запускается, лишние порты не слушаются, сервер работает исключительно в RAW/UDP.
+  - При включении: полноценная поддержка WireGuard с автоматической маршрутизацией и проксированием.
 
 ## [1.5.0] — 2026-08-12
 

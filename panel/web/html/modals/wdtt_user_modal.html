@@ -50,42 +50,8 @@
             Задано хешей: [[ connVkHashCount ]] · iOS возьмёт первый, остальные клиенты — все
           </div>
         </a-form-item>
-        <a-form-item v-if="!userModal.isMain" label="Лимит трафика (GB)">
-          <a-input-number v-model="userForm.total_gb" :min="0" :step="1" placeholder="0 = без ограничений" style="width: 100%"></a-input-number>
-          <div class="text-muted" style="font-size:12px;margin-top:4px">
-            [[ Number(userForm.total_gb) > 0 ? (userForm.total_gb + ' GB') : '0 или пусто = безлимитный трафик' ]]
-          </div>
-        </a-form-item>
-        <a-form-item v-if="!userModal.isMain" label="Срок действия">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-            <a-switch v-model="userForm.unlimited" checked-children="Бессрочно" un-checked-children="Лимит"></a-switch>
-            <span class="text-muted" style="font-size:12px">[[ userForm.unlimited ? 'Бессрочный доступ (без истечения)' : 'Ограниченный срок' ]]</span>
-          </div>
-          <div v-if="!userForm.unlimited">
-            <a-date-picker v-model="userForm.expiryDate" format="YYYY-MM-DD" placeholder="Выберите дату окончания" style="width:100%"></a-date-picker>
-            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
-              <a-button size="small" @click="setExpiryDays(30)">+30 дн.</a-button>
-              <a-button size="small" @click="setExpiryDays(90)">+90 дн.</a-button>
-              <a-button size="small" @click="setExpiryDays(180)">+180 дн.</a-button>
-              <a-button size="small" @click="setExpiryDays(365)">+1 год</a-button>
-            </div>
-          </div>
-        </a-form-item>
-        <a-form-item v-if="!userModal.isMain" label="Макс. устройств">
-          <a-input-number v-model="userForm.max_devices" :min="1" :max="100" style="width: 100%"></a-input-number>
-          <div class="text-muted" style="font-size:12px;margin-top:4px">
-            Слоты для одновременных устройств (по умолчанию 1)
-          </div>
-        </a-form-item>
-        <a-form-item v-if="!userModal.isMain" label="Лимит скорости (Мбит/с)">
-          <a-row :gutter="8">
-            <a-col :span="12">
-              <a-input-number v-model="userForm.max_down_mbit" :min="0" placeholder="↓ Загрузка (0 = ∞)" style="width:100%"></a-input-number>
-            </a-col>
-            <a-col :span="12">
-              <a-input-number v-model="userForm.max_up_mbit" :min="0" placeholder="↑ Отдача (0 = ∞)" style="width:100%"></a-input-number>
-            </a-col>
-          </a-row>
+        <a-form-item v-if="!userModal.isMain" label="Тариф и Лимиты">
+          <a-tag color="green">Безлимитный доступ (Без ограничений скорости, трафика и устройств)</a-tag>
         </a-form-item>
         <a-form-item v-if="userModal.isEdit || userModal.isMain" label="Использовано">
           <a-tag :color="trafficTagColor">[[ formatBytes(trafficUsed) ]] <span v-if="Number(userForm.total_gb) > 0">/ [[ userForm.total_gb ]] GB</span><span v-else>/ ∞</span></a-tag>

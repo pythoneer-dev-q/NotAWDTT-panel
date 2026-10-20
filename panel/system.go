@@ -127,9 +127,17 @@ func ensureXrayFollowsWdtt() {
 
 // refreshTunnelLocalServiceRules обновляет iptables для панели/подписки через VPN (порты из panel.db).
 func refreshTunnelLocalServiceRules() {
-	if _, err := os.Stat(wdttXrayRulesPath); err == nil {
-		if _, err := runCmd("bash", wdttXrayRulesPath, "up"); err != nil {
+	script := wdttXrayRulesPath
+	if _, err := os.Stat(script); err != nil {
+		if _, err := os.Stat("scripts/wdtt-xray-rules.sh"); err == nil {
+			script = "scripts/wdtt-xray-rules.sh"
+		}
+	}
+	if _, err := os.Stat(script); err == nil {
+		if out, err := runCmd("bash", script, "up"); err != nil {
 			log.Printf("[panel] xray rules refresh: %v", err)
+		} else {
+			log.Printf("[panel] xray rules applied successfully: %s", strings.TrimSpace(out))
 		}
 	}
 	if err := wdttHotReload(); err != nil {

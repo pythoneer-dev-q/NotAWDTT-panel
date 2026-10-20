@@ -86,15 +86,26 @@ fi
 BIN_OUT="wdtt-linux-${ARCH}"
 if [ -f "$BIN_OUT" ]; then
     install -m 0755 "$BIN_OUT" /usr/local/bin/wdtt-app
+    mkdir -p /etc/wdtt/bin
+    cp "$BIN_OUT" /etc/wdtt/bin/wdtt
 elif [ -f "/usr/local/bin/wdtt-app" ]; then
     echo " -> Используется существующий бинарник /usr/local/bin/wdtt-app"
+    mkdir -p /etc/wdtt/bin
+    cp /usr/local/bin/wdtt-app /etc/wdtt/bin/wdtt 2>/dev/null || true
 else
     echo -e "${RED}[ERROR] Бинарник $BIN_OUT не найден. Запустите build.sh вручную.${NC}"
     exit 1
 fi
 
-# Установка CLI-утилиты
+# Установка CLI-утилиты и правил маршрутизации
 install -m 0755 "${SCRIPT_DIR}/scripts/wdtt-cli.sh" /usr/local/bin/wdtt
+if [ -f "${SCRIPT_DIR}/scripts/wdtt-xray-rules.sh" ]; then
+    install -m 0755 "${SCRIPT_DIR}/scripts/wdtt-xray-rules.sh" /usr/local/bin/wdtt-xray-rules.sh
+fi
+if [ -f "${SCRIPT_DIR}/scripts/wdtt-mtu-rules.sh" ]; then
+    install -m 0755 "${SCRIPT_DIR}/scripts/wdtt-mtu-rules.sh" /usr/local/bin/wdtt-mtu-rules.sh
+fi
+
 cat << 'EOF' > /etc/profile.d/wdtt.sh
 alias wdtt='/usr/local/bin/wdtt'
 EOF
@@ -112,6 +123,7 @@ Type=simple
 User=root
 WorkingDirectory=/etc/wdtt
 ExecStart=/usr/local/bin/wdtt-app -config-dir /etc/wdtt
+ExecStartPost=-/usr/local/bin/wdtt-xray-rules.sh up
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
@@ -125,6 +137,9 @@ systemctl daemon-reload
 systemctl enable wdtt.service
 systemctl restart wdtt.service
 sleep 3
+if [ -x /usr/local/bin/wdtt-xray-rules.sh ]; then
+    /usr/local/bin/wdtt-xray-rules.sh up || true
+fi
 
 # 6. Настройка фаервола
 echo -e "${CYAN}[6/6] Настройка фаервола (открытие портов)...${NC}"

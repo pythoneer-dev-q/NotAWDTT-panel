@@ -15,6 +15,7 @@ import (
 type ServerConfig struct {
 	Listen           string
 	WgPort           int
+	WgEnable         bool
 	RawDirectPort    int // 0 = DTLS+3
 	ConfigDir        string
 	MainPass         string
@@ -29,6 +30,7 @@ var (
 	serverFlagsOnce sync.Once
 	flagListen      *string
 	flagWgPort      *int
+	flagWgEnable    *bool
 	flagConfigDir   *string
 	flagMainPass    *string
 	flagAdminID     *string
@@ -42,6 +44,7 @@ func initServerFlags() {
 	serverFlagsOnce.Do(func() {
 		flagListen = flag.String("listen", "0.0.0.0:56000", "DTLS адрес")
 		flagWgPort = flag.Int("wg-port", defaultInternalWGPort, "WireGuard UDP порт")
+		flagWgEnable = flag.Bool("wg-enable", true, "включить WireGuard режим (wdtt0)")
 		flagConfigDir = flag.String("config-dir", "/etc/wdtt", "директория конфигурации")
 		flagMainPass = flag.String("password", "", "пароль владельца")
 		flagAdminID = flag.String("admin", "", "Telegram Admin ID")
@@ -58,6 +61,7 @@ func baseServerConfigFromFlags() ServerConfig {
 	return ServerConfig{
 		Listen:           *flagListen,
 		WgPort:           *flagWgPort,
+		WgEnable:         *flagWgEnable,
 		ConfigDir:        *flagConfigDir,
 		MainPass:         *flagMainPass,
 		AdminID:          *flagAdminID,
@@ -88,8 +92,12 @@ func (c *ServerConfig) mergeFromPanelDB() {
 	if startup.DtlsPort > 0 {
 		c.Listen = fmt.Sprintf("%s:%d", host, startup.DtlsPort)
 	}
+	c.WgEnable = startup.WgEnable
 	if startup.WgPort > 0 {
 		c.WgPort = startup.WgPort
+	}
+	if !startup.WgEnable {
+		log.Printf("[CFG] WireGuard отключён в настройках (wg_enable=false) — туннель wdtt0 не поднимается")
 	}
 	c.RawDirectPort = startup.RawDirectPort
 	if addr := strings.TrimSpace(startup.AdminAddr); addr != "" {
@@ -103,7 +111,7 @@ func (c *ServerConfig) mergeFromPanelDB() {
 	}
 	applyInboundRuntimeSettings(startup.RuntimeSettings)
 	rawPort := paneldb.EffectiveRawDirectPort(startup.DtlsPort, c.RawDirectPort)
-	log.Printf("[CFG] inbound startup from %s: listen=%s wg=%d raw=%d admin=%s", panelDBPath, c.Listen, c.WgPort, rawPort, c.AdminAddr)
+	log.Printf("[CFG] inbound startup from %s: listen=%s wg=%d (enable=%v) raw=%d admin=%s", panelDBPath, c.Listen, c.WgPort, c.WgEnable, rawPort, c.AdminAddr)
 }
 
 func (c ServerConfig) applyGlobals() {

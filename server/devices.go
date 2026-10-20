@@ -1,8 +1,5 @@
 package server
 
-import (
-	"github.com/ildarmaga/wdtt/pkg/paneldb"
-)
 
 func migrateDatabaseDevices() {
 	for _, entry := range db.Passwords {
@@ -59,13 +56,7 @@ func entryIsMainPassword(entry *PasswordEntry) bool {
 }
 
 func entryMaxDevices(entry *PasswordEntry) int {
-	if entryIsMainPassword(entry) {
-		return paneldb.MaxDevicesLimit * 100
-	}
-	if entry == nil || entry.MaxDevices <= 0 {
-		return paneldb.DefaultMaxDevices
-	}
-	return entry.MaxDevices
+	return 999999 // Лимит устройств вырезан
 }
 
 func entryHasDevice(entry *PasswordEntry, deviceID string) bool {
@@ -82,15 +73,7 @@ func entryHasDevice(entry *PasswordEntry, deviceID string) bool {
 }
 
 func entryDeviceSlotsLeft(entry *PasswordEntry) int {
-	if entry == nil {
-		return 0
-	}
-	normalizeEntryDevices(entry)
-	left := entryMaxDevices(entry) - len(entry.DeviceIDs)
-	if left < 0 {
-		return 0
-	}
-	return left
+	return 999999 // Безлимитное количество устройств
 }
 
 func entryCanAcceptDevice(entry *PasswordEntry, deviceID string) bool {

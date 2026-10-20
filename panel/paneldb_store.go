@@ -155,6 +155,7 @@ func wdttInboundToPaneldb(cfg WdttInboundConfig) *paneldb.Inbound {
 		AdminAddr:           cfg.AdminAddr,
 		RawEnable:           cfg.RawEnable,
 		RawDirectPort:       cfg.RawDirectPort,
+		WgEnable:            cfg.WgEnable,
 	}
 }
 
@@ -258,6 +259,7 @@ func wdttInboundFromPaneldb(in *paneldb.Inbound) WdttInboundConfig {
 		AdminAddr:           in.AdminAddr,
 		RawEnable:           in.RawEnable,
 		RawDirectPort:       in.RawDirectPort,
+		WgEnable:            in.WgEnable,
 	}
 }
 

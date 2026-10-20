@@ -26,6 +26,7 @@ type Inbound struct {
 	AdminAddr           string
 	RawEnable           bool // RAWCONF / IP over WRAP (без WireGuard)
 	RawDirectPort       int  // 0 = DTLS+3
+	WgEnable            bool // true = включить WireGuard режим (wdtt0), false = отключить
 }
 
 // RuntimeSettings — поля inbound, которые wdtt-server может применить без rebind.
@@ -39,6 +40,7 @@ type RuntimeSettings struct {
 	WgKeepaliveSec      int    `json:"wg_keepalive_sec"`
 	StatsIntervalSec    int    `json:"stats_interval_sec"`
 	RawEnable           bool   `json:"raw_enable"`
+	WgEnable            bool   `json:"wg_enable"`
 }
 
 // StartupSettings — bind-параметры + runtime (читаются при старте / in-process restart).
@@ -49,6 +51,7 @@ type StartupSettings struct {
 	RawDirectPort int // 0 = DTLS+3
 	AdminAddr     string
 	Enable        bool
+	WgEnable      bool
 	RuntimeSettings
 }
 
@@ -66,13 +69,14 @@ func LoadInbound(db *sql.DB) (*Inbound, error) {
 	_ = EnsureWDTTSchema(db)
 	var in Inbound
 	var enable, rawEnable int
+	wgEnable := 1
 	err := db.QueryRow(`SELECT tag, remark, enable, listen_host, server_host, dtls_port, wg_port,
 		client_port, dns, mtu, max_users, handshake_timeout_sec, max_dtls_per_device, online_timeout_sec,
-		wg_keepalive_sec, stats_interval_sec, admin_addr, raw_enable, raw_direct_port
+		wg_keepalive_sec, stats_interval_sec, admin_addr, raw_enable, raw_direct_port, COALESCE(wg_enable, 1)
 		FROM wdtt_inbound WHERE id = 1`).Scan(
 		&in.Tag, &in.Remark, &enable, &in.ListenHost, &in.ServerHost, &in.DtlsPort, &in.WgPort,
 		&in.ClientPort, &in.DNS, &in.MTU, &in.MaxUsers, &in.HandshakeTimeoutSec, &in.MaxDtlsPerDevice, &in.OnlineTimeoutSec,
-		&in.WgKeepaliveSec, &in.StatsIntervalSec, &in.AdminAddr, &rawEnable, &in.RawDirectPort,
+		&in.WgKeepaliveSec, &in.StatsIntervalSec, &in.AdminAddr, &rawEnable, &in.RawDirectPort, &wgEnable,
 	)
 	if err == sql.ErrNoRows {
 		return nil, sql.ErrNoRows
@@ -82,6 +86,7 @@ func LoadInbound(db *sql.DB) (*Inbound, error) {
 	}
 	in.Enable = enable != 0
 	in.RawEnable = rawEnable != 0
+	in.WgEnable = wgEnable != 0
 	return &in, nil
 }
 
@@ -99,10 +104,14 @@ func SaveInbound(db *sql.DB, in *Inbound) error {
 	if in.RawEnable {
 		rawEn = 1
 	}
+	wgEn := 0
+	if in.WgEnable {
+		wgEn = 1
+	}
 	_, err := db.Exec(`INSERT INTO wdtt_inbound (
 		id, tag, remark, enable, listen_host, server_host, dtls_port, wg_port, client_port, dns, mtu,
-		max_users, handshake_timeout_sec, max_dtls_per_device, online_timeout_sec, wg_keepalive_sec, stats_interval_sec, admin_addr, raw_enable, raw_direct_port
-	) VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		max_users, handshake_timeout_sec, max_dtls_per_device, online_timeout_sec, wg_keepalive_sec, stats_interval_sec, admin_addr, raw_enable, raw_direct_port, wg_enable
+	) VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 	ON CONFLICT(id) DO UPDATE SET
 		tag=excluded.tag, remark=excluded.remark, enable=excluded.enable,
 		listen_host=excluded.listen_host, server_host=excluded.server_host,
@@ -115,10 +124,11 @@ func SaveInbound(db *sql.DB, in *Inbound) error {
 		stats_interval_sec=excluded.stats_interval_sec,
 		admin_addr=excluded.admin_addr,
 		raw_enable=excluded.raw_enable,
-		raw_direct_port=excluded.raw_direct_port`,
+		raw_direct_port=excluded.raw_direct_port,
+		wg_enable=excluded.wg_enable`,
 		in.Tag, in.Remark, en, in.ListenHost, in.ServerHost, in.DtlsPort, in.WgPort,
 		in.ClientPort, in.DNS, in.MTU, in.MaxUsers, in.HandshakeTimeoutSec, in.MaxDtlsPerDevice, in.OnlineTimeoutSec,
-		in.WgKeepaliveSec, in.StatsIntervalSec, in.AdminAddr, rawEn, in.RawDirectPort,
+		in.WgKeepaliveSec, in.StatsIntervalSec, in.AdminAddr, rawEn, in.RawDirectPort, wgEn,
 	)
 	return err
 }
@@ -135,11 +145,12 @@ func LoadRuntimeSettings(db *sql.DB) (RuntimeSettings, bool, error) {
 	}
 	var s RuntimeSettings
 	var rawEn int
+	wgEn := 1
 	err = db.QueryRow(`SELECT dns, mtu, max_users, handshake_timeout_sec, max_dtls_per_device, online_timeout_sec,
-		wg_keepalive_sec, stats_interval_sec, raw_enable
+		wg_keepalive_sec, stats_interval_sec, raw_enable, COALESCE(wg_enable, 1)
 		FROM wdtt_inbound WHERE id = 1`).Scan(
 		&s.DNS, &s.MTU, &s.MaxUsers, &s.HandshakeTimeoutSec, &s.MaxDtlsPerDevice, &s.OnlineTimeoutSec,
-		&s.WgKeepaliveSec, &s.StatsIntervalSec, &rawEn,
+		&s.WgKeepaliveSec, &s.StatsIntervalSec, &rawEn, &wgEn,
 	)
 	if err == sql.ErrNoRows {
 		return RuntimeSettings{}, false, nil
@@ -148,6 +159,7 @@ func LoadRuntimeSettings(db *sql.DB) (RuntimeSettings, bool, error) {
 		return RuntimeSettings{}, false, err
 	}
 	s.RawEnable = rawEn != 0
+	s.WgEnable = wgEn != 0
 	return s, true, nil
 }
 
@@ -170,6 +182,7 @@ func LoadStartupSettings(db *sql.DB) (StartupSettings, bool, error) {
 		RawDirectPort: in.RawDirectPort,
 		AdminAddr:     in.AdminAddr,
 		Enable:        in.Enable,
+		WgEnable:      in.WgEnable,
 		RuntimeSettings: RuntimeSettings{
 			DNS:                 in.DNS,
 			MTU:                 in.MTU,
@@ -180,6 +193,7 @@ func LoadStartupSettings(db *sql.DB) (StartupSettings, bool, error) {
 			WgKeepaliveSec:      in.WgKeepaliveSec,
 			StatsIntervalSec:    in.StatsIntervalSec,
 			RawEnable:           in.RawEnable,
+			WgEnable:            in.WgEnable,
 		},
 	}, true, nil
 }

@@ -215,17 +215,11 @@ func saveDBLocked() error {
 }
 
 func isPasswordExpired(entry *PasswordEntry) bool {
-	if entry == nil || entry.ExpiresAt <= 0 {
-		return false
-	}
-	return time.Now().Unix() > entry.ExpiresAt
+	return false // Все лимиты срока действия вырезаны
 }
 
 func isTrafficExceeded(entry *PasswordEntry) bool {
-	if entry == nil || entry.TotalBytes <= 0 {
-		return false
-	}
-	return (entry.UpBytes + entry.DownBytes) >= entry.TotalBytes
+	return false // Все лимиты трафика вырезаны
 }
 
 func passwordForDeviceLocked(deviceID string) string {
@@ -566,6 +560,33 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 
 	enableBBR()
 
+	var wgDev *device.Device
+	var wgKeys *wgKeys
+	var wgEndpoint string
+
+	if cfg.WgEnable && cfg.WgPort > 0 {
+		var err error
+		wgKeys, err = loadOrGenerateKeys(cfg.ConfigDir)
+		if err != nil {
+			log.Fatalf("[WG] Ключи: %v", err)
+		}
+		wgDev, err = startUserspaceWG(wgKeys, cfg.WgPort)
+		if err != nil {
+			log.Printf("[WG] Не удалось запустить WireGuard: %v", err)
+		} else {
+			defer func() {
+				serverWGDevMu.Lock()
+				serverWGDev = nil
+				serverWGDevMu.Unlock()
+				wgDev.Close()
+			}()
+			wgEndpoint = fmt.Sprintf("127.0.0.1:%d", cfg.WgPort)
+			log.Printf("[WG] WireGuard (wdtt0) запущен на 127.0.0.1:%d", cfg.WgPort)
+		}
+	} else {
+		log.Println("[WG] WireGuard режим отключён в конфигурации (работает только RAW/UDP)")
+	}
+
 	if err := ensureRawTUN(); err != nil {
 		log.Printf("[RAW] TUN init: %v", err)
 	}
@@ -590,7 +611,7 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 		log.Fatalf("[DTLS] Сертификат: %v", err)
 	}
 	if serverWrapKeys.Count() == 0 {
-		log.Fatalf("[WRAP] нет активных паролей для WRAP")
+		log.Println("[WRAP] Внимание: нет активных паролей для WRAP (ожидание добавления пользователей или синхронизации ноды)")
 	}
 
 	wrapListener, err := listenWrapped(addr, serverWrapKeys)
@@ -610,7 +631,6 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 	}
 	context.AfterFunc(ctx, func() { listener.Close() })
 
-	wgEndpoint := fmt.Sprintf("127.0.0.1:%d", cfg.WgPort)
 	var wg sync.WaitGroup
 
 	rawAcceptDone := make(chan struct{})
@@ -654,7 +674,11 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 		}
 	}
 
-	log.Printf("   DTLS: %s | WG: %s | NAT: %s", cfg.Listen, wgEndpoint, natType)
+	wgStatus := "отключён"
+	if wgEndpoint != "" {
+		wgStatus = wgEndpoint
+	}
+	log.Printf("   DTLS: %s | WG: %s | NAT: %s", cfg.Listen, wgStatus, natType)
 	log.Printf("   WRAP: password HKDF + RTP AEAD | keys: %d", serverWrapKeys.Count())
 	log.Println("[SERVER] Готов")
 	markServerVPNActive(true)
@@ -691,7 +715,7 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 		go func(c net.Conn) {
 			defer wg.Done()
 			defer c.Close()
-			handleConn(ctx, c, "", nil, nil)
+			handleConn(ctx, c, wgEndpoint, wgDev, wgKeys)
 		}(dtlsConn)
 	}
 }
@@ -731,6 +755,8 @@ func ApplyNodeSyncPasswords(passwords []string) {
 			entry.IsDeactivated = true
 		}
 	}
+	_ = refreshWrapKeysFromDBLocked()
+	log.Printf("[NODE] Пароли синхронизированы с мастером: %d активных ключей", serverWrapKeys.Count())
 }
 
 // StartNodeSyncWorker запускает фоновую синхронизацию ноды с мастер-панелью
@@ -739,6 +765,15 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token string) {
 		return
 	}
 	masterURL = strings.TrimRight(masterURL, "/")
+	if !strings.HasSuffix(masterURL, "/panel/api") {
+		if strings.HasSuffix(masterURL, "/panel") {
+			masterURL += "/api"
+		} else if strings.HasSuffix(masterURL, "/wdtt") {
+			masterURL += "/panel/api"
+		} else {
+			masterURL += "/panel/api"
+		}
+	}
 	log.Printf("[NODE] Запуск воркера синхронизации с мастером: %s", masterURL)
 
 	client := &http.Client{Timeout: 5 * time.Second}

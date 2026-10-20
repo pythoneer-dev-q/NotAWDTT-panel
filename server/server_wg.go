@@ -545,6 +545,11 @@ func startUserspaceWG(keys *wgKeys, wgPort int) (*device.Device, error) {
 		return nil, err
 	}
 
+	serverWGDevMu.Lock()
+	serverWGDev = dev
+	serverWGDevMu.Unlock()
+	ensureXrayRulesUp()
+
 	go func() {
 		uapiFile, err := ipc.UAPIOpen(ifaceName)
 		if err != nil {

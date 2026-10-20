@@ -31,26 +31,43 @@ esac
 
 # 1. Системные пакеты
 echo -e "${CYAN}[1/6] Обновление пакетов и установка зависимостей...${NC}"
-apt-get update -y
+# Очищаем устаревшие или битые репозитории MongoDB перед обновлением
+rm -f /etc/apt/sources.list.d/mongodb-org-*.list
+
+apt-get update -y || true
 apt-get install -y curl gnupg tar iptables ca-certificates libcap2-bin iproute2 procps
 
 # 2. Установка MongoDB (если не установлена)
 echo -e "${CYAN}[2/6] Проверка и установка MongoDB...${NC}"
 if ! command -v mongod >/dev/null 2>&1; then
     echo " -> Добавление официального репозитория MongoDB Community..."
-    curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
-        gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor --yes 2>/dev/null || true
-
     . /etc/os-release
     DISTRO="${ID:-ubuntu}"
-    CODENAME="${VERSION_CODENAME:-jammy}"
+    CODENAME="${VERSION_CODENAME:-noble}"
+
+    # Для Ubuntu 24.04 (noble) и свежих дистрибутивов используется MongoDB 8.0
+    MONGO_VER="8.0"
+    if [ "$CODENAME" = "focal" ]; then
+        MONGO_VER="7.0"
+    fi
+
+    curl -fsSL "https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc" | \
+        gpg -o "/usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg" --dearmor --yes 2>/dev/null || true
 
     if [ "$DISTRO" = "ubuntu" ]; then
-        echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu ${CODENAME}/mongodb-org/7.0 multiverse" | \
-            tee /etc/apt/sources.list.d/mongodb-org-7.0.list >/dev/null
+        REPO_CODENAME="$CODENAME"
+        if [ "$CODENAME" != "noble" ] && [ "$CODENAME" != "jammy" ] && [ "$CODENAME" != "focal" ]; then
+            REPO_CODENAME="noble"
+        fi
+        echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg ] https://repo.mongodb.org/apt/ubuntu ${REPO_CODENAME}/mongodb-org/${MONGO_VER} multiverse" | \
+            tee "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" >/dev/null
     else
-        echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] http://repo.mongodb.org/apt/debian ${CODENAME}/mongodb-org/7.0 main" | \
-            tee /etc/apt/sources.list.d/mongodb-org-7.0.list >/dev/null
+        REPO_CODENAME="$CODENAME"
+        if [ "$CODENAME" != "bookworm" ] && [ "$CODENAME" != "bullseye" ]; then
+            REPO_CODENAME="bookworm"
+        fi
+        echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-${MONGO_VER}.gpg ] http://repo.mongodb.org/apt/debian ${REPO_CODENAME}/mongodb-org/${MONGO_VER} main" | \
+            tee "/etc/apt/sources.list.d/mongodb-org-${MONGO_VER}.list" >/dev/null
     fi
 
     apt-get update -y || true

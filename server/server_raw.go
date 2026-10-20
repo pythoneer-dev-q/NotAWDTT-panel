@@ -19,7 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sys/unix"
 )
 
 const (
@@ -29,7 +28,6 @@ const (
 	rawSubnet     = "10.70.0.0/16"
 	rawIPTComment = "WDTT_RAW_MANAGED"
 	rawDefaultMTU = 1280
-	rawTunFlags   = unix.IFF_TUN | unix.IFF_NO_PI
 )
 
 // rawSession — одна DTLS-сессия в режиме RAW (IP over WRAP, без WireGuard).
@@ -285,28 +283,6 @@ func ensureRawTUN() error {
 		rawTunErr = startRawTUN()
 	})
 	return rawTunErr
-}
-
-func createRawTUNFile(name string) (*os.File, error) {
-	fd, err := unix.Open("/dev/net/tun", unix.O_RDWR|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return nil, fmt.Errorf("open /dev/net/tun: %w", err)
-	}
-	ifr, err := unix.NewIfreq(name)
-	if err != nil {
-		_ = unix.Close(fd)
-		return nil, err
-	}
-	ifr.SetUint16(rawTunFlags)
-	if err := unix.IoctlIfreq(fd, unix.TUNSETIFF, ifr); err != nil {
-		_ = unix.Close(fd)
-		return nil, fmt.Errorf("TUNSETIFF: %w", err)
-	}
-	if err := unix.SetNonblock(fd, false); err != nil {
-		_ = unix.Close(fd)
-		return nil, err
-	}
-	return os.NewFile(uintptr(fd), "/dev/net/tun"), nil
 }
 
 func startRawTUN() error {

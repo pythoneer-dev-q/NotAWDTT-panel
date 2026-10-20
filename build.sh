@@ -3,6 +3,44 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
+
+ensure_go() {
+  if command -v go >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "═══════════════════════════════════════════════════════"
+  echo "    Go не найден. Автоматическая установка Go..."
+  echo "═══════════════════════════════════════════════════════"
+  local arch="amd64"
+  case "$(uname -m)" in
+    x86_64) arch="amd64" ;;
+    aarch64|arm64) arch="arm64" ;;
+  esac
+  local go_ver="1.23.2"
+  local tarball="go${go_ver}.linux-${arch}.tar.gz"
+  echo " -> Загрузка Go ${go_ver} (${arch})..."
+  mkdir -p /tmp
+  if ! curl -fsSL "https://go.dev/dl/${tarball}" -o "/tmp/${tarball}"; then
+    curl -fsSL "https://golang.org/dl/${tarball}" -o "/tmp/${tarball}"
+  fi
+  echo " -> Распаковка в /usr/local/go..."
+  rm -rf /usr/local/go && tar -C /usr/local -xzf "/tmp/${tarball}"
+  rm -f "/tmp/${tarball}"
+  export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
+
+  if [ -f /etc/profile ] && ! grep -q '/usr/local/go/bin' /etc/profile; then
+    echo 'export PATH=/usr/local/go/bin:$PATH' >> /etc/profile
+  fi
+  if [ -f /root/.bashrc ] && ! grep -q '/usr/local/go/bin' /root/.bashrc; then
+    echo 'export PATH=/usr/local/go/bin:$PATH' >> /root/.bashrc
+  fi
+
+  echo "✓ Go $(go version) успешно установлен!"
+}
+
+ensure_go
+
 ARCH="${1:-amd64}"
 TARGET="${2:-all}"
 

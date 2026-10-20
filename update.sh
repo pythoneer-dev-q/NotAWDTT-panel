@@ -15,6 +15,8 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
+export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 

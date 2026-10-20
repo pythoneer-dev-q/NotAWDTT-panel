@@ -78,10 +78,8 @@ echo -e "${CYAN}[4/6] Сборка и установка бинарника WDTT
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-if command -v go >/dev/null 2>&1; then
-    echo " -> Сборка unified бинарника через Go..."
-    bash ./build.sh "$ARCH" unified || true
-fi
+echo " -> Сборка unified бинарника через Go..."
+bash ./build.sh "$ARCH" unified
 
 BIN_OUT="wdtt-linux-${ARCH}"
 if [ -f "$BIN_OUT" ]; then

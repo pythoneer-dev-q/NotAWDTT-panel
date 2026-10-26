@@ -18,7 +18,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
 )
 
 const (
@@ -1088,10 +1087,12 @@ func runRawRelay(ctx context.Context, clientConn net.Conn, deviceID, ip, passwor
 		}
 	}
 	group.tryAdd(sess, 0) // Безлимитное количество сессий для устройства
+	requestSpeedLimitSync()
 	downCh := sess.downCh
 	go rawSessionDownWriter(sess, downCh)
 	defer func() {
 		_ = group.remove(sess) // CompareAndDelete внутри, под замком группы
+		requestSpeedLimitSync()
 		log.Printf("[RAW] Сессия %s (ip=%s) завершена (осталось в группе: %d)", deviceID, ip, group.len())
 	}()
 
@@ -1413,4 +1414,3 @@ func ensureXrayRulesUp() {
 		}
 	}
 }
-

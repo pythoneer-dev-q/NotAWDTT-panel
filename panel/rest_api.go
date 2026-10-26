@@ -124,6 +124,9 @@ func registerRestAPI(mux *http.ServeMux, app *App, base string) {
 		// System
 		mux.HandleFunc(p+"status", app.requireRestAuth(app.handleRestStatus))
 		mux.HandleFunc(p+"system/restart", app.requireRestAuth(app.handleRestRestart))
+		mux.HandleFunc(p, func(w http.ResponseWriter, r *http.Request) {
+			restError(w, http.StatusNotFound, "API endpoint not found")
+		})
 	}
 }
 

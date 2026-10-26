@@ -536,7 +536,7 @@ curl -X DELETE -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD"
         const action = willBlock ? 'block' : 'activate';
         try {
           const res = await wdttFetchPost(basePath + 'api/users/' + encodeURIComponent(pass) + '/' + action, {});
-          const msg = await res.json();
+          const msg = await wdttReadJSONResponse(res);
           if (msg.success) {
             this.toast(willBlock ? 'Пользователь заблокирован' : 'Пользователь активирован', true);
             this.loadUsers();
@@ -559,7 +559,7 @@ curl -X DELETE -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD"
           onOk: async () => {
             try {
               const res = await wdttFetchPost(basePath + 'api/users/' + encodeURIComponent(pass) + '/reset-traffic', {});
-              const msg = await res.json();
+              const msg = await wdttReadJSONResponse(res);
               if (msg.success) {
                 self.toast('Трафик сброшен', true);
                 self.loadUsers();
@@ -601,7 +601,7 @@ curl -X DELETE -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD"
       async delUser(pass) {
         if (!confirm('Удалить пользователя ' + pass + '?')) return;
         const res = await wdttFetchPost(basePath + 'panel/api/users/delete', { password: pass });
-        const msg = await res.json();
+        const msg = await wdttReadJSONResponse(res);
         if (msg.success) { this.toast('Удалён', true); this.loadUsers(); }
         else this.toast(msg.msg || 'ошибка', false);
       },

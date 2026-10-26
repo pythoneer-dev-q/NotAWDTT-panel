@@ -26,6 +26,10 @@ func main() {
 		fmt.Println("Admin credentials updated")
 		return
 	}
+	if len(os.Args) == 2 && (os.Args[1] == "--build-commit" || os.Args[1] == "-build-commit") {
+		fmt.Println(panel.FormatPanelBuildCommit())
+		return
+	}
 	noPanel := false
 	panelOnly := false
 	nodeSync := ""
@@ -90,7 +94,7 @@ func main() {
 	if nodeSync != "" && nodeToken != "" {
 		noPanel = true
 		server.ConfigureNodeDataDir("/etc/wdtt-node")
-		server.StartNodeSyncWorker(context.Background(), nodeSync, nodeToken, nodeCertPin)
+		server.StartNodeSyncWorker(context.Background(), nodeSync, nodeToken, nodeCertPin, panel.FormatPanelVersion(), panel.FormatPanelBuildCommit())
 	} else {
 		if err := panel.BootstrapDB(); err != nil {
 			log.Fatalf("[PANEL] ERROR bootstrap: %v", err)

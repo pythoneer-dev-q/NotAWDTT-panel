@@ -331,9 +331,9 @@
     }
     let data = null;
     try {
-      data = await res.json();
+      data = await wdttReadJSONResponse(res);
     } catch (e) {
-      throw new Error('Неверный ответ сервера');
+      throw e;
     }
     if (!data || data.success !== true) {
       throw new Error((data && data.msg) || ('HTTP ' + res.status));

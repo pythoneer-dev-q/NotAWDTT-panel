@@ -19,6 +19,21 @@ export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+UPDATE_REPO="${WDTT_UPDATE_REPO:-https://github.com/pythoneer-dev-q/NotAWDTT-panel.git}"
+
+if [ "${1:-}" = "--check" ]; then
+    current_commit="$(git rev-parse HEAD)"
+    latest_commit="$(GIT_TERMINAL_PROMPT=0 timeout 20 git ls-remote "$UPDATE_REPO" refs/heads/main | awk '$2 == "refs/heads/main" { print $1 }')"
+    [ -n "$latest_commit" ] || { echo 'Не удалось получить версию main с GitHub' >&2; exit 1; }
+    installed_commit="$(/usr/local/bin/wdtt-app --build-commit 2>/dev/null || true)"
+    printf 'Исходники: %s\nGitHub main: %s\nУстановленный бинарник: %s\n' "$current_commit" "$latest_commit" "${installed_commit:-версия неизвестна}"
+    if [ "$current_commit" = "$latest_commit" ] && [ "$installed_commit" = "$current_commit" ]; then
+        echo 'Панель актуальна.'
+    else
+        echo 'Доступно обновление или требуется пересборка бинарника.'
+    fi
+    exit 0
+fi
 
 # Keep the selected verbosity across subsequent updates and restarts.
 SAVED_LOG_LEVEL=""
@@ -53,7 +68,12 @@ echo "════════════════════════�
 echo -e "${NC}"
 
 echo -e "${CYAN}[1/4] Загрузка последних изменений из репозитория...${NC}"
-git pull
+GIT_TERMINAL_PROMPT=0 git fetch "$UPDATE_REPO" refs/heads/main
+if ! git merge-base --is-ancestor HEAD FETCH_HEAD; then
+    echo 'Текущая ветка расходится с main; автоматическое обновление остановлено.' >&2
+    exit 1
+fi
+git merge --ff-only FETCH_HEAD
 
 echo -e "${CYAN}[2/4] Сборка единого бинарника WDTT (Unified RAW/UDP + Panel)...${NC}"
 ARCH="amd64"
@@ -64,6 +84,14 @@ case "$(uname -m)" in
 esac
 
 bash ./build.sh "$ARCH" unified
+
+OTHER_ARCH=arm64
+[ "$ARCH" = arm64 ] && OTHER_ARCH=amd64
+if [ -f "/etc/wdtt/bin/wdtt-linux-${OTHER_ARCH}" ]; then
+    echo "Обновление бинарника для нод ${OTHER_ARCH}..."
+    bash ./build.sh "$OTHER_ARCH" unified
+    install -m 0755 "wdtt-linux-${OTHER_ARCH}" "/etc/wdtt/bin/wdtt-linux-${OTHER_ARCH}"
+fi
 
 BIN_OUT="wdtt-linux-${ARCH}"
 if [ ! -f "$BIN_OUT" ]; then

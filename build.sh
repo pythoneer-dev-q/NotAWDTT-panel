@@ -100,8 +100,10 @@ build_unified() {
   if [[ -z "$version" ]]; then
     version="$(git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo 1.4.0)"
   fi
+  local commit
+  commit="$(git rev-parse HEAD 2>/dev/null || true)"
   CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" \
-    go build -trimpath -ldflags="-s -w -X wdtt-panel.panelVersion=${version}" -o "$out" ./cmd/wdtt
+    go build -trimpath -ldflags="-s -w -X wdtt-panel.panelVersion=${version} -X wdtt-panel.panelBuildCommit=${commit}" -o "$out" ./cmd/wdtt
   chmod +x "$out"
   echo "OK: $out (server + panel, v${version})"
 }

@@ -53,26 +53,16 @@ func (a *App) handleGetXrayVersion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleGetPanelVersion(w http.ResponseWriter, r *http.Request) {
-	tags, err := fetchWdttPanelReleases()
+	status, err := checkPanelUpdate(r.Context())
 	if err != nil {
-		jsonError(w, err.Error(), http.StatusOK)
+		jsonError(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	jsonOK(w, tags)
+	jsonOK(w, status)
 }
 
 func (a *App) handleInstallPanel(w http.ResponseWriter, r *http.Request) {
-	tag := strings.TrimPrefix(r.URL.Path, a.cfg.basePath()+"panel/api/server/installPanel/")
-	tag = strings.Trim(tag, "/")
-	if tag == "" {
-		jsonError(w, "version required", http.StatusOK)
-		return
-	}
-	if err := installPanelVersion(tag); err != nil {
-		jsonMsg(w, err.Error(), false)
-		return
-	}
-	jsonMsg(w, "Panel "+tag+" installed", true)
+	jsonError(w, "Обновите панель из этого репозитория командой sudo bash update.sh; прямая установка бинарника из другого проекта отключена", http.StatusConflict)
 }
 
 func (a *App) handleGetConfigJSON(w http.ResponseWriter, r *http.Request) {

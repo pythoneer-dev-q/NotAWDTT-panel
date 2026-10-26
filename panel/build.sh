@@ -19,7 +19,8 @@ if [[ -z "$VERSION" ]]; then
   VERSION="$(git -C .. describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo 1.4.0)"
 fi
 
-LDFLAGS="-s -w -X wdtt-panel.panelVersion=${VERSION}"
+COMMIT="$(git -C .. rev-parse HEAD 2>/dev/null || true)"
+LDFLAGS="-s -w -X wdtt-panel.panelVersion=${VERSION} -X wdtt-panel.panelBuildCommit=${COMMIT}"
 CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" \
   go build -trimpath -ldflags="${LDFLAGS}" -o "$OUT" ./cmd
 chmod +x "$OUT"

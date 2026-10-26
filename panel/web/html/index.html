@@ -323,24 +323,17 @@
   </a-layout>
   <a-modal id="panel-version-modal" v-model="panelVersionModal.visible" title='{{ i18n "pages.index.panelUpdate" }}'
     :closable="true" @ok="() => panelVersionModal.visible = false" :class="themeSwitcher.currentTheme" footer="">
-    <a-alert type="info" class="mb-12 w-100" message='{{ i18n "pages.index.panelUpdateDesk" }}' show-icon></a-alert>
-    <div class="mb-12">
-      <a-tag color="green">v{{ .cur_ver }}</a-tag>
-      <span class="ml-8">{{ i18n "pages.index.panelUpdateCurrent" }}</span>
-    </div>
-    <div class="panel-version-list-wrap">
-      <a-list class="ant-version-list w-100" bordered :loading="panelVersionModal.loading">
-        <a-list-item class="ant-version-list-item" v-for="version, index in panelVersionModal.versions" :key="version">
-          <a-space>
-            <a-tag :color="index === 0 ? 'cyan' : (index % 2 === 0 ? 'purple' : 'green')">[[ version ]]</a-tag>
-            <a-tag v-if="index === 0" color="blue">latest</a-tag>
-            <a-tag v-if="isCurrentPanelVersion(version)" color="green">●</a-tag>
-          </a-space>
-          <a-radio :class="themeSwitcher.currentTheme" :checked="isCurrentPanelVersion(version)"
-            @click="switchPanelVersion(version)"></a-radio>
-        </a-list-item>
-      </a-list>
-    </div>
+    <a-spin :spinning="panelVersionModal.loading">
+      <a-alert v-if="panelVersionModal.status" :type="panelVersionModal.status.update_available ? 'warning' : 'success'" show-icon
+        :message="panelVersionModal.status.update_available ? 'Версия панели отличается от GitHub main' : 'Панель актуальна'" style="margin-bottom:12px"></a-alert>
+      <div v-if="panelVersionModal.status">
+        <p>Установлено: <b>[[ panelVersionModal.status.current_version ]]</b> <code>[[ (panelVersionModal.status.current_commit || 'коммит неизвестен').slice(0, 12) ]]</code></p>
+        <p>GitHub main: <code>[[ panelVersionModal.status.latest_commit.slice(0, 12) ]]</code></p>
+        <p>Проверить из SSH: <code>sudo bash update.sh --check</code></p>
+        <p>Обновить панель из репозитория: <code>cd "$(cat /etc/wdtt/source-dir)" &amp;&amp; sudo bash update.sh</code></p>
+        <a-button icon="copy" @click="copyPanelUpdateCommand">Скопировать команду обновления</a-button>
+      </div>
+    </a-spin>
   </a-modal>
   <a-modal id="version-modal" v-model="versionModal.visible" title='{{ i18n "pages.index.xraySwitch" }}'
     :closable="true" @ok="() => versionModal.visible = false" :class="themeSwitcher.currentTheme" footer="">
@@ -883,15 +876,13 @@
     },
   };
 
-  const curPanelVersion = '{{ .cur_ver }}';
-
   const panelVersionModal = {
     visible: false,
     loading: false,
-    versions: [],
-    show(versions) {
+    status: null,
+    show(status) {
       this.visible = true;
-      this.versions = versions || [];
+      this.status = status || null;
     },
     hide() {
       this.visible = false;
@@ -1216,11 +1207,6 @@
         versionModal.show(msg.obj);
         this.loadCustomGeo();
       },
-      isCurrentPanelVersion(version) {
-        const v = String(version || '').replace(/^v/i, '');
-        const cur = String(curPanelVersion || '').replace(/^v/i, '');
-        return v !== '' && v === cur;
-      },
       async openSelectPanelVersion() {
         panelVersionModal.loading = true;
         panelVersionModal.visible = true;
@@ -1232,27 +1218,9 @@
         }
         panelVersionModal.show(msg.obj);
       },
-      switchPanelVersion(version) {
-        if (this.isCurrentPanelVersion(version)) {
-          return;
-        }
-        this.$confirm({
-          title: '{{ i18n "pages.index.panelSwitchVersionDialog"}}'.replace('#version#', version),
-          content: '{{ i18n "pages.index.panelSwitchVersionDialogDesc"}}'.replace('#version#', version),
-          okText: '{{ i18n "confirm"}}',
-          class: themeSwitcher.currentTheme,
-          cancelText: '{{ i18n "cancel"}}',
-          onOk: async () => {
-            panelVersionModal.hide();
-            this.loading(true, '{{ i18n "pages.index.dontRefresh"}}');
-            const msg = await HttpUtil.post(`/panel/api/server/installPanel/${encodeURIComponent(version)}`);
-            this.loading(false);
-            if (msg && msg.success) {
-              this.$message.success('{{ i18n "pages.index.panelUpdateSuccess"}}');
-              setTimeout(() => { window.location.reload(); }, 4000);
-            }
-          },
-        });
+      copyPanelUpdateCommand() {
+        const command = 'cd "$(cat /etc/wdtt/source-dir)" && sudo bash update.sh';
+        ClipboardManager.copyText(command).then(ok => this.$message[ok ? 'success' : 'error'](ok ? 'Команда скопирована' : 'Не удалось скопировать'));
       },
       customGeoFormatTime(ts) {
         if (!ts) return '';

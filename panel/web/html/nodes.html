@@ -125,10 +125,10 @@
               <div v-if="!nodes.length" class="text-muted">Ноды ещё не добавлены.</div>
               <div class="node-list">
                 <div class="node-row" :class="{'is-online': row.status === 'online'}" v-for="row in nodes" :key="row.id">
-                  <div><div class="node-row-name">[[ row.name ]] <a-tag v-if="row.is_local" color="orange">Панель</a-tag></div><small>[[ row.id ]]</small></div>
+                  <div><div class="node-row-name">[[ row.name ]] <a-tag v-if="row.is_local" color="orange">Панель</a-tag></div><small>[[ row.id ]]</small><small v-if="!row.is_local">Версия: [[ row.version || 'неизвестна' ]] <span v-if="row.build_commit">([[ row.build_commit.slice(0, 8) ]])</span></small><a-tag v-if="nodeNeedsUpdate(row)" color="orange">Требуется обновление</a-tag></div>
                   <div><div class="node-endpoint">[[ row.host || serverIP ]]</div><small>UDP [[ row.dtls_port || 56000 ]] · RAW [[ row.raw_port || 56003 ]]</small></div>
                   <div><a-tag :color="row.status === 'online' ? 'green' : (row.status === 'installing' ? 'orange' : 'default')">[[ row.status === 'online' ? 'Онлайн' : (row.status === 'installing' ? 'Подключается' : (row.status === 'disabled' ? 'Выключена' : 'Нет связи')) ]]</a-tag><div class="node-traffic">[[ row.online_users || 0 ]] сессий · [[ formatBytes((row.traffic_up || 0) + (row.traffic_down || 0)) ]]</div><small v-if="row.last_seen_at">Последний ответ: [[ new Date(row.last_seen_at * 1000).toLocaleString('ru-RU') ]]</small><small v-if="row.cert_sha256" :title="row.cert_sha256">DTLS SHA-256: [[ row.cert_sha256.slice(0, 20) ]]…</small></div>
-                  <div class="node-actions"><a-button size="small" icon="wifi" @click="pingNode(row)" :loading="row.pinging">DNS</a-button><a-button v-if="!row.is_local" :disabled="!row.is_active" size="small" icon="download" @click="showInstallCmd(row)">Установить</a-button><a-button size="small" icon="edit" @click="openEditModal(row)"></a-button><a-popconfirm v-if="!row.is_local" title="Удалить ноду?" ok-text="Да" cancel-text="Нет" @confirm="deleteNode(row.id)"><a-button size="small" icon="delete"></a-button></a-popconfirm></div>
+                  <div class="node-actions"><a-button size="small" icon="wifi" @click="pingNode(row)" :loading="row.pinging">DNS</a-button><a-button v-if="!row.is_local" :disabled="!row.is_active" size="small" icon="download" @click="showInstallCmd(row)">Установить</a-button><a-button v-if="!row.is_local && row.last_seen_at" size="small" icon="sync" @click="copyNodeUpdate">Обновить</a-button><a-button size="small" icon="edit" @click="openEditModal(row)"></a-button><a-popconfirm v-if="!row.is_local" title="Удалить ноду?" ok-text="Да" cancel-text="Нет" @confirm="deleteNode(row.id)"><a-button size="small" icon="delete"></a-button></a-popconfirm></div>
                 </div>
               </div>
             </a-card>
@@ -205,6 +205,8 @@ new Vue({
       loading: false,
       serverIP: '',
       certPin: '',
+      panelVersion: '',
+      panelCommit: '',
       nodes: [],
       columns: [
         { title: 'Сервер / Нода', dataIndex: 'name', scopedSlots: { customRender: 'name' } },
@@ -279,6 +281,8 @@ new Vue({
         if (res.success && res.obj) {
           this.serverIP = res.obj.server_ip || '';
           this.certPin = res.obj.cert_pin || '';
+          this.panelVersion = res.obj.panel_version || '';
+          this.panelCommit = res.obj.panel_commit || '';
           this.nodes = (res.obj.nodes || []).map(n => ({ ...n, pinging: false, latency: null }));
         } else if (!silent) {
           this.$message.error(res.msg || 'Не удалось загрузить ноды');
@@ -300,6 +304,14 @@ new Vue({
         is_local: false,
       };
       this.modal.visible = true;
+    },
+    nodeNeedsUpdate(row) {
+      return !row.is_local && !!this.panelCommit && row.status === 'online' && row.build_commit !== this.panelCommit;
+    },
+    copyNodeUpdate() {
+      ClipboardManager.copyText('sudo wdtt-node reinstall').then(ok => {
+        this.$message[ok ? 'success' : 'error'](ok ? 'Запустите на VPS: sudo wdtt-node reinstall' : 'Не удалось скопировать команду');
+      });
     },
     openEditModal(row) {
       this.modal.isEdit = true;

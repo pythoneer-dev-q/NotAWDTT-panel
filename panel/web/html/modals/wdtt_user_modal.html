@@ -593,7 +593,7 @@
             self.userModal.resetting = true;
             try {
               const res = await wdttFetchPost(basePath + 'panel/api/users/reset-traffic', { password: self.userForm.password });
-              const msg = await res.json();
+              const msg = await wdttReadJSONResponse(res);
               if (msg.success) {
                 Vue.prototype.$message.success('Трафик сброшен');
                 self.userForm.up_bytes = 0;
@@ -631,7 +631,7 @@
                 password: this.userModal.oldPassword,
                 device_ids: this.userForm.device_ids,
               });
-              const devMsg = await devRes.json();
+              const devMsg = await wdttReadJSONResponse(devRes);
               if (!devMsg.success) {
                 Vue.prototype.$message.error(devMsg.msg || 'ошибка сохранения устройств');
                 return;
@@ -639,7 +639,7 @@
             }
             if (pwdChanged) {
               const pwdRes = await wdttFetchPost(basePath + 'panel/api/password/main', { password: this.userForm.password });
-              const pwdMsg = await pwdRes.json();
+              const pwdMsg = await wdttReadJSONResponse(pwdRes);
               if (!pwdMsg.success) {
                 Vue.prototype.$message.error(pwdMsg.msg || 'ошибка смены пароля');
                 return;
@@ -674,7 +674,7 @@
           } else {
             res = await wdttFetchPost(basePath + 'panel/api/users/add', body);
           }
-          const msg = await res.json();
+          const msg = await wdttReadJSONResponse(res);
           if (msg.success) {
             const okText = this.userModal.isEdit ? 'Сохранено'
               : ('Создан: ' + (msg.obj && msg.obj.password || this.userForm.password));

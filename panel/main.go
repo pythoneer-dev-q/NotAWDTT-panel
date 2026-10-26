@@ -141,6 +141,9 @@ func Run() error {
 	mux.HandleFunc(api+"vk/auth/login", app.requireAuthCSRF(app.handleVKAuthLogin))
 	mux.HandleFunc(api+"vk/auth/save", app.requireAuthCSRF(app.handleVKAuthSave))
 	mux.HandleFunc(api+"vk/auth/clear", app.requireAuthCSRF(app.handleVKAuthClear))
+	mux.HandleFunc(api, func(w http.ResponseWriter, r *http.Request) {
+		jsonError(w, "API endpoint not found", http.StatusNotFound)
+	})
 	mux.HandleFunc(base+"panel/vk/login", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, base+"panel/vk/login/", http.StatusFound)
 	})

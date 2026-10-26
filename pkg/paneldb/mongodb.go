@@ -33,6 +33,8 @@ type Node struct {
 	LastSeenAt         int64  `bson:"last_seen_at" json:"last_seen_at"`
 	InstallRequestedAt int64  `bson:"install_requested_at" json:"install_requested_at"`
 	CertSHA256         string `bson:"cert_sha256" json:"cert_sha256"`
+	Version            string `bson:"version,omitempty" json:"version,omitempty"`
+	BuildCommit        string `bson:"build_commit,omitempty" json:"build_commit,omitempty"`
 	Status             string `bson:"status" json:"status"` // "online", "offline"
 	OnlineUsers        int    `bson:"online_users" json:"online_users"`
 	TrafficUp          int64  `bson:"traffic_up" json:"traffic_up"`
@@ -293,7 +295,7 @@ func (m *MongoDB) DeleteNode(ctx context.Context, id string) error {
 	return err
 }
 
-func (m *MongoDB) UpdateNodeHeartbeat(ctx context.Context, apiKey string, onlineUsers int, upDelta, downDelta int64, certSHA256 string) error {
+func (m *MongoDB) UpdateNodeHeartbeat(ctx context.Context, apiKey string, onlineUsers int, upDelta, downDelta int64, certSHA256, version, buildCommit string) error {
 	coll := m.db.Collection("nodes")
 	now := time.Now().Unix()
 	update := bson.M{
@@ -302,6 +304,8 @@ func (m *MongoDB) UpdateNodeHeartbeat(ctx context.Context, apiKey string, online
 			"status":       "online",
 			"online_users": onlineUsers,
 			"cert_sha256":  certSHA256,
+			"version":      version,
+			"build_commit": buildCommit,
 		},
 		"$inc": bson.M{
 			"traffic_up":   upDelta,

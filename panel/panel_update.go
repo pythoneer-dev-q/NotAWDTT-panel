@@ -1,30 +1,20 @@
 package panel
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
 )
 
-const defaultWdttGithubUser = "ildarmaga"
+const panelUpdateRepo = "https://github.com/pythoneer-dev-q/NotAWDTT-panel.git"
 
-type wdttGitHubRelease struct {
-	TagName string `json:"tag_name"`
-}
-
-func wdttGithubUser() string {
-	if u := strings.TrimSpace(os.Getenv("WDTT_GITHUB_USER")); u != "" {
-		return u
-	}
-	return defaultWdttGithubUser
-}
+var gitCommitPattern = regexp.MustCompile(`^[a-f0-9]{40}$`)
 
 func panelReleaseBinName() string {
 	switch runtime.GOARCH {
@@ -54,76 +44,30 @@ func panelInstallPath() string {
 	return wdttServerBin
 }
 
-func fetchWdttPanelReleases() ([]string, error) {
-	client := &http.Client{Timeout: 20 * time.Second}
-	url := fmt.Sprintf("https://api.github.com/repos/%s/wdtt/releases?per_page=20", wdttGithubUser())
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, githubAPIMaxBody))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, githubAPIError(resp.StatusCode, body)
-	}
-	var releases []wdttGitHubRelease
-	if err := json.Unmarshal(body, &releases); err != nil {
-		return nil, fmt.Errorf("GitHub releases JSON: %w", err)
-	}
-	tags := make([]string, 0, len(releases))
-	for _, rel := range releases {
-		if rel.TagName != "" {
-			tags = append(tags, rel.TagName)
-		}
-	}
-	return filterReleaseTagsSinceDB(tags), nil
+type panelUpdateStatus struct {
+	CurrentVersion  string `json:"current_version"`
+	CurrentCommit   string `json:"current_commit"`
+	LatestCommit    string `json:"latest_commit"`
+	UpdateAvailable bool   `json:"update_available"`
+	CheckedAt       int64  `json:"checked_at"`
 }
 
-func installPanelVersion(tag string) error {
-	tag = strings.TrimSpace(tag)
-	if tag == "" {
-		return fmt.Errorf("версия не указана")
+func checkPanelUpdate(ctx context.Context) (panelUpdateStatus, error) {
+	status := panelUpdateStatus{CurrentVersion: FormatPanelVersion(), CurrentCommit: FormatPanelBuildCommit()}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", panelUpdateRepo, "refs/heads/main")
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	out, err := cmd.Output()
+	if err != nil {
+		return status, fmt.Errorf("не удалось проверить GitHub: %w", err)
 	}
-	binName := panelReleaseBinName()
-	url := fmt.Sprintf("https://github.com/%s/wdtt/releases/download/%s/%s", wdttGithubUser(), tag, binName)
-	dest := panelInstallPath()
-	tmp := filepath.Join(os.TempDir(), binName+".download")
-	if err := downloadFile(url, tmp); err != nil {
-		return fmt.Errorf("скачивание %s: %w", tag, err)
+	fields := strings.Fields(string(out))
+	if len(fields) != 2 || !gitCommitPattern.MatchString(fields[0]) || fields[1] != "refs/heads/main" {
+		return status, fmt.Errorf("GitHub вернул неверную версию ветки main")
 	}
-	defer os.Remove(tmp)
-	if err := os.Chmod(tmp, 0755); err != nil {
-		return err
-	}
-	backup := dest + ".bak." + fmt.Sprintf("%d", time.Now().Unix())
-	if _, err := os.Stat(dest); err == nil {
-		_ = os.Rename(dest, backup)
-	}
-	if err := os.Rename(tmp, dest); err != nil {
-		in, err := os.Open(tmp)
-		if err != nil {
-			return err
-		}
-		defer in.Close()
-		out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
-		if err != nil {
-			return err
-		}
-		if _, err := out.ReadFrom(in); err != nil {
-			out.Close()
-			return err
-		}
-		out.Close()
-	}
-	log.Printf("[PANEL] updated to %s (%s)", tag, dest)
-	go func() {
-		time.Sleep(800 * time.Millisecond)
-		if err := restartPanelService(); err != nil {
-			log.Printf("[PANEL] self-restart after update: %v", err)
-		}
-	}()
-	return nil
+	status.LatestCommit = fields[0]
+	status.UpdateAvailable = status.CurrentCommit == "" || status.CurrentCommit != status.LatestCommit
+	status.CheckedAt = time.Now().Unix()
+	return status, nil
 }

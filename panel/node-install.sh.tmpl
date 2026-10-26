@@ -6,6 +6,7 @@ NODE_TOKEN={{quote .Token}}
 NODE_ID={{quote .ID}}
 NODE_NAME={{quote .Name}}
 NODE_CERT_PIN={{quote .CertPin}}
+PANEL_BUILD_COMMIT={{quote .BuildCommit}}
 if [ -n "${WDTT_PANEL_PIN:-}" ]; then NODE_CERT_PIN="$WDTT_PANEL_PIN"; fi
 DTLS_PORT={{.DtlsPort}}
 RAW_PORT={{.RawPort}}
@@ -68,6 +69,13 @@ curl "${curl_opts[@]}" -H "Authorization: Bearer $NODE_TOKEN" "$MASTER_URL/node/
 if [ "$(od -An -tx1 -N4 "$tmp_bin" | tr -d ' \n')" != '7f454c46' ]; then
     echo 'Панель вернула файл вместо ELF-бинарника.' >&2
     exit 1
+fi
+if [ -n "$PANEL_BUILD_COMMIT" ]; then
+    downloaded_commit=$("$tmp_bin" --build-commit 2>/dev/null || true)
+    if [ "$downloaded_commit" != "$PANEL_BUILD_COMMIT" ]; then
+        echo "Версия бинарника ноды не совпадает с панелью: ожидалась $PANEL_BUILD_COMMIT, получена ${downloaded_commit:-неизвестная}. Обновите бинарник панели и повторите установку." >&2
+        exit 1
+    fi
 fi
 curl "${curl_opts[@]}" -H "Authorization: Bearer $NODE_TOKEN" "$MASTER_URL/node/cli" -o "$tmp_cli"
 if [ "$(head -c 19 "$tmp_cli")" != '#!/usr/bin/env bash' ] || ! bash -n "$tmp_cli"; then

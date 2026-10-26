@@ -11,6 +11,8 @@ case "${1:-}" in
     status)
         systemctl status wdtt-node.service --no-pager
         echo "Панель: $MASTER_URL | Нода: $NODE_ID"
+        echo "Версия ноды: $(/usr/local/bin/wdtt-node-app --version 2>/dev/null || echo неизвестна)"
+        echo "Коммит ноды: $(/usr/local/bin/wdtt-node-app --build-commit 2>/dev/null || echo неизвестен)"
         echo "UDP: $WDTT_DTLS_PORT | RAW: $WDTT_RAW_PORT"
         ;;
     logs|log) journalctl -u wdtt-node.service -f -n 50 ;;

@@ -591,6 +591,14 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 	if err := ensureRawTUN(); err != nil {
 		log.Printf("[RAW] TUN init: %v", err)
 	}
+	speedApplyMu.Lock()
+	if tcAvailable() {
+		resetTcOnIface(wgIfaceName)
+		resetTcOnIface(rawIfaceName)
+	}
+	appliedSpeedLimits = make(map[string]clientSpeedLimit)
+	speedApplyMu.Unlock()
+	syncAllSpeedLimits()
 
 	clearWGActivity()
 	clearOnlineUsers()
@@ -724,10 +732,24 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 
 // ==================== Обработка соединений ====================
 
-// ApplyNodeSyncPasswords обновляет активные пароли ноды из мастер-панели
+type NodeSyncUser struct {
+	Password    string  `json:"password"`
+	MaxDownMBps float64 `json:"max_down_mbps"`
+	MaxUpMBps   float64 `json:"max_up_mbps"`
+}
+
+// ApplyNodeSyncPasswords keeps compatibility with panels that only send passwords.
 func ApplyNodeSyncPasswords(passwords []string) {
+	users := make([]NodeSyncUser, 0, len(passwords))
+	for _, password := range passwords {
+		users = append(users, NodeSyncUser{Password: password})
+	}
+	ApplyNodeSyncUsers(users)
+}
+
+// ApplyNodeSyncUsers updates credentials and per-user speed limits together.
+func ApplyNodeSyncUsers(users []NodeSyncUser) {
 	dbMutex.Lock()
-	defer dbMutex.Unlock()
 	if db == nil {
 		db = &Database{
 			Passwords: make(map[string]*PasswordEntry),
@@ -738,18 +760,22 @@ func ApplyNodeSyncPasswords(passwords []string) {
 		db.Passwords = make(map[string]*PasswordEntry)
 	}
 	existing := make(map[string]bool)
-	for _, p := range passwords {
-		p = strings.TrimSpace(p)
+	for _, user := range users {
+		p := strings.TrimSpace(user.Password)
 		if p == "" {
 			continue
 		}
 		existing[p] = true
 		if db.Passwords[p] == nil {
 			db.Passwords[p] = &PasswordEntry{
-				Comment: "Cluster User",
+				Comment:     "Cluster User",
+				MaxDownMBps: user.MaxDownMBps,
+				MaxUpMBps:   user.MaxUpMBps,
 			}
 		} else {
 			db.Passwords[p].IsDeactivated = false
+			db.Passwords[p].MaxDownMBps = user.MaxDownMBps
+			db.Passwords[p].MaxUpMBps = user.MaxUpMBps
 		}
 	}
 	for p, entry := range db.Passwords {
@@ -758,11 +784,14 @@ func ApplyNodeSyncPasswords(passwords []string) {
 		}
 	}
 	_ = refreshWrapKeysFromDBLocked()
-	log.Printf("[NODE] Пароли синхронизированы с мастером: %d активных ключей", serverWrapKeys.Count())
+	count := serverWrapKeys.Count()
+	dbMutex.Unlock()
+	syncAllSpeedLimits()
+	log.Printf("[NODE] Пароли и лимиты синхронизированы с мастером: %d активных ключей", count)
 }
 
 // StartNodeSyncWorker запускает фоновую синхронизацию ноды с мастер-панелью
-func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin string) {
+func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin, version, buildCommit string) {
 	if masterURL == "" || token == "" {
 		return
 	}
@@ -812,16 +841,21 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin string) 
 		var data struct {
 			Success bool `json:"success"`
 			Obj     struct {
-				Passwords []string `json:"passwords"`
-				DtlsPort  int      `json:"dtls_port"`
-				RawPort   int      `json:"raw_port"`
+				Passwords []string       `json:"passwords"`
+				Users     []NodeSyncUser `json:"users"`
+				DtlsPort  int            `json:"dtls_port"`
+				RawPort   int            `json:"raw_port"`
 			} `json:"obj"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil || !data.Success {
 			log.Printf("[NODE] Неверный ответ синхронизации: %v", err)
 			return
 		}
-		ApplyNodeSyncPasswords(data.Obj.Passwords)
+		if data.Obj.Users != nil {
+			ApplyNodeSyncUsers(data.Obj.Users)
+		} else {
+			ApplyNodeSyncPasswords(data.Obj.Passwords)
+		}
 
 		dbMutex.Lock()
 		onlineUsers := countOnlineUsersLocked()
@@ -852,6 +886,8 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin string) 
 			"traffic_up":   upDelta,
 			"traffic_down": downDelta,
 			"cert_sha256":  localNodeCertSHA256(),
+			"version":      version,
+			"build_commit": buildCommit,
 		})
 		hbReq, err := http.NewRequestWithContext(ctx, http.MethodPost, hbURL, bytes.NewReader(hbBody))
 		if err != nil {

@@ -41,6 +41,8 @@ func localNodeEnabled() bool {
 var installerHostPattern = regexp.MustCompile(`^[A-Za-z0-9.:[\]-]+$`)
 var installerPathPattern = regexp.MustCompile(`^/[A-Za-z0-9/_-]*/$`)
 var certFingerprintPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
+var nodeVersionPattern = regexp.MustCompile(`^[A-Za-z0-9._+\-]{0,64}$`)
+var buildCommitPattern = regexp.MustCompile(`^[a-f0-9]{40}$`)
 
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
@@ -112,8 +114,10 @@ func (a *App) handleNodesList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonOK(w, map[string]interface{}{
-		"nodes":     nodes,
-		"server_ip": srvIP,
+		"nodes":         nodes,
+		"server_ip":     srvIP,
+		"panel_version": FormatPanelVersion(),
+		"panel_commit":  FormatPanelBuildCommit(),
 		"cert_pin": func() string {
 			if r.TLS == nil || a.cfg.WebCertFile == "" {
 				return ""
@@ -368,9 +372,15 @@ func (a *App) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	passwords := make([]string, 0, len(store.Users))
+	users := make([]map[string]interface{}, 0, len(store.Users))
 	for p, u := range store.Users {
 		if u != nil && !u.IsDeactivated {
 			passwords = append(passwords, p)
+			users = append(users, map[string]interface{}{
+				"password":      p,
+				"max_down_mbps": u.MaxDownMBps,
+				"max_up_mbps":   u.MaxUpMBps,
+			})
 		}
 	}
 
@@ -379,6 +389,7 @@ func (a *App) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 		"dtls_port": matchedNode.DtlsPort,
 		"raw_port":  matchedNode.RawPort,
 		"passwords": passwords,
+		"users":     users,
 		"dns":       inbound.DNS,
 		"mtu":       inbound.MTU,
 	})
@@ -399,13 +410,17 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		TrafficUp   int64  `json:"traffic_up"`
 		TrafficDown int64  `json:"traffic_down"`
 		CertSHA256  string `json:"cert_sha256"`
+		Version     string `json:"version"`
+		BuildCommit string `json:"build_commit"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		http.Error(w, "bad request", 400)
 		return
 	}
 	if req.OnlineUsers < 0 || req.TrafficUp < 0 || req.TrafficDown < 0 ||
-		(req.CertSHA256 != "" && !certFingerprintPattern.MatchString(req.CertSHA256)) {
+		(req.CertSHA256 != "" && !certFingerprintPattern.MatchString(req.CertSHA256)) ||
+		!nodeVersionPattern.MatchString(req.Version) ||
+		(req.BuildCommit != "" && !buildCommitPattern.MatchString(req.BuildCommit)) {
 		http.Error(w, "invalid node status", http.StatusBadRequest)
 		return
 	}
@@ -416,7 +431,7 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.UpdateNodeHeartbeat(ctx, node.ApiKey, req.OnlineUsers, req.TrafficUp, req.TrafficDown, req.CertSHA256); err != nil {
+	if err := m.UpdateNodeHeartbeat(ctx, node.ApiKey, req.OnlineUsers, req.TrafficUp, req.TrafficDown, req.CertSHA256, req.Version, req.BuildCommit); err != nil {
 		http.Error(w, err.Error(), 404)
 		return
 	}
@@ -554,7 +569,7 @@ func (a *App) handleNodeInstallScript(w http.ResponseWriter, r *http.Request) {
 	var script bytes.Buffer
 	err = tmpl.Execute(&script, map[string]interface{}{
 		"MasterURL": masterURL, "Token": node.ApiKey, "ID": node.ID,
-		"Name": node.Name, "CertPin": certPin,
+		"Name": node.Name, "CertPin": certPin, "BuildCommit": FormatPanelBuildCommit(),
 		"DtlsPort": node.DtlsPort, "RawPort": node.RawPort,
 	})
 	if err != nil {

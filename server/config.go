@@ -63,7 +63,7 @@ func baseServerConfigFromFlags() ServerConfig {
 	cfg := ServerConfig{
 		Listen:           *flagListen,
 		WgPort:           *flagWgPort,
-		WgEnable:         false,
+		WgEnable:         *flagWgEnable,
 		ConfigDir:        *flagConfigDir,
 		MainPass:         *flagMainPass,
 		AdminID:          *flagAdminID,

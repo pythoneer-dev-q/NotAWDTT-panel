@@ -490,6 +490,7 @@ func syncPanelDeviceEditsLocked() {
 	} else {
 		db.Devices = make(map[string]*ClientDevice)
 	}
+	invalidateWGIPCacheLocked()
 	if incoming.MainPassword != "" {
 		db.MainPassword = incoming.MainPassword
 	}

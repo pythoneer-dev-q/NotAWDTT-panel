@@ -58,7 +58,7 @@ WDTT Server — VPN-бэкенд для схемы **VK TURN → WRAP → DTLS �
     ▼
 [UDP :56000] WRAP (RTP AEAD) → DTLS 1.2 → GETCONF → WG relay
     ▼
-[127.0.0.1:56001] userspace WireGuard (wdtt0, 10.66.66.0/24)
+[127.0.0.1:56001] userspace WireGuard (wdtt0, 10.66.0.0/16)
     ▼
 [NAT MASQUERADE] → интернет
 ```
@@ -134,7 +134,7 @@ flowchart TB
 
   subgraph wg [WireGuard userspace]
     WG[:56001 wdtt0]
-    TUN[TUN 10.66.66.1/24]
+    TUN[TUN 10.66.66.1/16]
     NAT[iptables MASQUERADE]
   end
 
@@ -152,7 +152,7 @@ flowchart TB
 ```go
 wgIfaceName           = "wdtt0"
 wgServerAddr          = "10.66.66.1"
-wgServerCIDR          = "10.66.66.0/24"
+wgServerCIDR          = "10.66.66.1/16"
 defaultInternalWGPort = 56001   // WG UDP внутри хоста
 default listen        = 0.0.0.0:56000  // DTLS снаружи
 wgMTU                 = 1280
@@ -286,13 +286,13 @@ dtlsConn.HandshakeContext(hctx)
 - `wireguard-go` device + default bind на `:56001`.
 - Peers из `db.Devices` при старте + `upsertPeerInWG` при GETCONF.
 - UAPI socket для `wg` CLI.
-- `configureInterface` — `10.66.66.1/24`, link up.
+- `configureInterface` — `10.66.66.1/16`, link up.
 
 ### 5.6 NAT (`server.go` — `setupFullConeNAT`)
 
 - `ip_forward=1`
 - FORWARD accept для `wdtt0` (iptables `-I 1`, до UFW)
-- MASQUERADE для `10.66.66.0/24` на внешний интерфейс
+- MASQUERADE для `10.66.0.0/16` на внешний интерфейс
 - Fallback: nftables
 - `natType` в статистике
 

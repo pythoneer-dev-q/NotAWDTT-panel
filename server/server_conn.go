@@ -76,8 +76,12 @@ func handleConn(ctx context.Context, clientConn net.Conn, wgEndpoint string, wgD
 
 	if strings.HasPrefix(firstStr, "GETCONF:") {
 		if wgDev == nil || wgEndpoint == "" || keys == nil {
-			clientConn.Write([]byte("DENIED:wireguard_disabled\n"))
-			log.Printf("[WG] Отказ: WireGuard режим отключен на сервере (%s)", clientConn.RemoteAddr())
+			reason := "wireguard_unavailable"
+			if keys == nil {
+				reason = "wireguard_disabled"
+			}
+			clientConn.Write([]byte("DENIED:" + reason + "\n"))
+			log.Printf("[WG] Отказ: %s (%s)", reason, clientConn.RemoteAddr())
 			return
 		}
 		parts := strings.Split(strings.TrimSpace(strings.TrimPrefix(firstStr, "GETCONF:")), "|")

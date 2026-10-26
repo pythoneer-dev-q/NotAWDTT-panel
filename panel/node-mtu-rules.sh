@@ -4,7 +4,7 @@
 set +e
 
 IFACE="${WDTT_IFACE:-wdtt0}"
-TUN_NET="${WDTT_TUN_NET:-10.66.66.0/24}"
+TUN_NET="${WDTT_TUN_NET:-10.66.0.0/16}"
 RAW_NET="${WDTT_RAW_NET:-10.70.0.0/16}"
 IPT_COMMENT="${WDTT_IPT_COMMENT:-WDTT_MANAGED}"
 DEFAULT_MTU="${WDTT_DEFAULT_MTU:-1280}"
@@ -64,7 +64,7 @@ NFT
 
 cleanup_mtu_rules() {
     if command -v iptables >/dev/null 2>&1; then
-        for subnet in "$TUN_NET" "$RAW_NET"; do
+        for subnet in "$TUN_NET" "10.66.66.0/24" "$RAW_NET"; do
             while iptables -t mangle -D FORWARD -s "$subnet" -p tcp -m tcp --tcp-flags SYN,RST SYN -m comment --comment "$IPT_COMMENT" -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null; do :; done
             while iptables -t mangle -D FORWARD -d "$subnet" -p tcp -m tcp --tcp-flags SYN,RST SYN -m comment --comment "$IPT_COMMENT" -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null; do :; done
         done
@@ -82,6 +82,7 @@ down)
 up)
     WAN="$(detect_wan)"
     MTU="$(tun_mtu)"
+    cleanup_mtu_rules
     apply_mss_clamp
     apply_df_clear "$WAN" "$MTU"
     echo "wdtt-mtu rules applied (MSS ${TUN_NET}, ${RAW_NET}; DF-clear ${WAN:-?} >${MTU}B)"

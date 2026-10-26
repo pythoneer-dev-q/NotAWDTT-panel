@@ -379,9 +379,10 @@ func setupFullConeNAT(wgIface string) error {
 	switch {
 	case commandExists("iptables"):
 		for i := 0; i < 5; i++ {
-			exec.Command("iptables", "-t", "nat", "-D", "POSTROUTING", "-s", wgServerCIDR, "-o", extIface, "-m", "comment", "--comment", "WDTT_MANAGED", "-j", "MASQUERADE").Run()
+			exec.Command("iptables", "-t", "nat", "-D", "POSTROUTING", "-s", wgSubnetCIDR, "-o", extIface, "-m", "comment", "--comment", "WDTT_MANAGED", "-j", "MASQUERADE").Run()
+			exec.Command("iptables", "-t", "nat", "-D", "POSTROUTING", "-s", "10.66.66.0/24", "-o", extIface, "-m", "comment", "--comment", "WDTT_MANAGED", "-j", "MASQUERADE").Run()
 		}
-		exec.Command("iptables", "-t", "nat", "-I", "POSTROUTING", "1", "-s", wgServerCIDR, "-o", extIface, "-m", "comment", "--comment", "WDTT_MANAGED", "-j", "MASQUERADE").Run()
+		exec.Command("iptables", "-t", "nat", "-I", "POSTROUTING", "1", "-s", wgSubnetCIDR, "-o", extIface, "-m", "comment", "--comment", "WDTT_MANAGED", "-j", "MASQUERADE").Run()
 		natType = "MASQUERADE iptables ✅"
 	case commandExists("nft"):
 		setupNftNAT(extIface)
@@ -465,7 +466,7 @@ func setupNftNAT(extIface string) {
 	exec.Command("nft", "delete", "table", "ip", "wdtt").Run()
 	exec.Command("nft", "add", "table", "ip", "wdtt").Run()
 	exec.Command("nft", "add", "chain", "ip", "wdtt", "postrouting", "{ type nat hook postrouting priority 100; }").Run()
-	exec.Command("nft", "add", "rule", "ip", "wdtt", "postrouting", "ip", "saddr", wgServerCIDR, "oifname", extIface, "masquerade").Run()
+	exec.Command("nft", "add", "rule", "ip", "wdtt", "postrouting", "ip", "saddr", wgSubnetCIDR, "oifname", extIface, "masquerade").Run()
 }
 
 func setupForwardRules(wgIface string) {
@@ -489,7 +490,6 @@ func setupForwardRules(wgIface string) {
 }
 
 // ==================== WireGuard ====================
-
 
 func configureInterface(ifaceName string) error {
 	for _, cmd := range [][]string{

@@ -54,11 +54,12 @@ func rawDirectListenAddr(dtlsAddr string, rawPort int) (string, error) {
 const (
 	wgIfaceName             = "wdtt0"
 	wgServerAddr            = "10.66.66.1"
-	wgServerCIDR            = wgServerAddr + "/24"
+	wgServerCIDR            = wgServerAddr + "/16"
+	wgSubnetCIDR            = "10.66.0.0/16"
 	defaultInternalWGPort   = 56001
 	defaultClientDNS        = "1.1.1.1"
-	defaultMaxUsers         = 10
-	maxUsersSubnetLimit     = 249
+	defaultMaxUsers         = 64768
+	maxUsersSubnetLimit     = 64768 // 256 subnets x 253 client addresses
 	defaultWgMTU            = 1280
 	defaultPanelTCPPort     = 2860 // fallback до panel.db
 	defaultSubTCPPort       = 2096
@@ -473,21 +474,7 @@ func buildPublicWdttLink(srvIP, ports, password, remark, vkHash string) string {
 }
 
 func getNextIP() string {
-	used := make(map[string]bool)
-	for _, dev := range db.Devices {
-		if dev != nil && dev.IP != "" {
-			used[dev.IP] = true
-		}
-	}
-	for subnet := 66; subnet <= 75; subnet++ {
-		for i := 2; i <= 254; i++ {
-			ip := fmt.Sprintf("10.66.%d.%d", subnet, i)
-			if !used[ip] {
-				return ip
-			}
-		}
-	}
-	return ""
+	return allocateWGIPLocked()
 }
 
 // ==================== Main ====================

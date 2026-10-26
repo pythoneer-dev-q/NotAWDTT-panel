@@ -38,6 +38,10 @@
       </template>
       <a-input-number v-model="inboundForm.dtls_port" :min="1" :max="65535" :style="{ width: '100%' }"></a-input-number>
     </a-form-item>
+    <a-form-item label="WireGuard внутри DTLS">
+      <a-switch v-model="inboundForm.wg_enable"></a-switch>
+      <span style="margin-left:10px">Нужен клиентам GETCONF; выключение оставит только RAW.</span>
+    </a-form-item>
     <a-form-item>
       <template slot="label">
         <a-tooltip title="UDP порт прямого RAW-подключения (WRAP AEAD, максимальная производительность)">
@@ -64,6 +68,12 @@
     </a-form-item>
     <a-form-item label="Подсеть RAW">
       <a-input :value="inboundForm.raw_subnet || '10.70.0.0/16'" disabled></a-input>
+    </a-form-item>
+    <a-form-item label="Подсеть DTLS/WG">
+      <a-input value="10.66.0.0/16" disabled></a-input>
+    </a-form-item>
+    <a-form-item label="Лимит пользователей">
+      <a-input-number v-model="inboundForm.max_users" :min="1" :max="64768" :style="{ width: '100%' }"></a-input-number>
     </a-form-item>
     <a-divider>Расширенные параметры</a-divider>
     <a-form-item>

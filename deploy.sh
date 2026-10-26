@@ -325,6 +325,7 @@ fw_cleanup_wdtt_rules() {
         for i in {1..5}; do
             local nat_iface
             for nat_iface in "$iface" $(ls /sys/class/net 2>/dev/null || true); do
+                [ -n "$nat_iface" ] && iptables -t nat -D POSTROUTING -s 10.66.0.0/16 -o "$nat_iface" -m comment --comment "$IPT_COMMENT" -j MASQUERADE 2>/dev/null || true
                 [ -n "$nat_iface" ] && iptables -t nat -D POSTROUTING -s 10.66.66.0/24 -o "$nat_iface" -m comment --comment "$IPT_COMMENT" -j MASQUERADE 2>/dev/null || true
             done
             iptables -D INPUT -p udp --dport ${DTLS_PORT} -m comment --comment "$IPT_COMMENT" -j ACCEPT 2>/dev/null || true
@@ -470,7 +471,7 @@ setup_nat_and_firewall() {
 
     if [ -z "$iface" ]; then
         log_warn "Не удалось определить WAN-интерфейс!"
-        log_warn "Настройте NAT вручную для подсети 10.66.66.0/24."
+        log_warn "Настройте NAT вручную для подсети 10.66.0.0/16."
         return 0
     fi
 
@@ -486,14 +487,14 @@ setup_nat_and_firewall() {
     fw_add_forward
 
     # === NAT: MASQUERADE для подсети WireGuard ===
-    fw_add_masquerade "$iface" "10.66.66.0/24"
+    fw_add_masquerade "$iface" "10.66.0.0/16"
 
     apply_wdtt_mtu_rules
 
     if [ "$FW_BACKEND" = "none" ]; then
         echo "⚠ NAT не настроен автоматически: firewall-бэкенд отсутствует"
     else
-        echo "✓ NAT: MASQUERADE на $iface для 10.66.66.0/24"
+        echo "✓ NAT: MASQUERADE на $iface для 10.66.0.0/16"
     fi
     echo "✓ Порты: ${DTLS_PORT}/udp(DTLS), ${WG_PORT}/udp(WG), ${RAW_DIRECT_PORT}/udp(RAW), ${SSH_PORT}/tcp(SSH)"
     echo "✓ MTU: MSS clamp + DF-clear (wdtt-mtu-rules.sh)"

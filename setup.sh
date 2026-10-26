@@ -3,6 +3,34 @@
 # WDTT Setup Script — Автоматическая установка MongoDB, ядра WDTT и панели
 # ==============================================================================
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_MODE="${WDTT_INSTALL_MODE:-}"
+case "${1:-}" in
+    --panel-only) INSTALL_MODE="panel" ;;
+    --panel-node) INSTALL_MODE="panel-node" ;;
+    "") ;;
+    *) echo "Использование: sudo bash setup.sh [--panel-only|--panel-node]" >&2; exit 2 ;;
+esac
+if [ -z "$INSTALL_MODE" ]; then
+    if [ -t 0 ]; then
+        echo "Режим установки: 1) Только панель  2) Панель + нода"
+        read -rp "Выберите [1/2] (по умолчанию 2): " mode_choice
+    elif [ -t 2 ] && [ -r /dev/tty ]; then
+        echo "Режим установки: 1) Только панель  2) Панель + нода" >&2
+        read -rp "Выберите [1/2] (по умолчанию 2): " mode_choice < /dev/tty
+    else
+        mode_choice=2
+    fi
+    case "$mode_choice" in
+        1) INSTALL_MODE="panel" ;;
+        ""|2) INSTALL_MODE="panel-node" ;;
+        *) echo "Неверный режим установки" >&2; exit 2 ;;
+    esac
+fi
+case "$INSTALL_MODE" in
+    panel|panel-node) ;;
+    *) echo "WDTT_INSTALL_MODE должен быть panel или panel-node" >&2; exit 2 ;;
+esac
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -111,10 +139,15 @@ EOF
     fi
     chmod 600 /etc/wdtt/.env 2>/dev/null || true
 fi
+if grep -q '^WDTT_INSTALL_MODE=' /etc/wdtt/.env; then
+    sed -i "s/^WDTT_INSTALL_MODE=.*/WDTT_INSTALL_MODE=${INSTALL_MODE}/" /etc/wdtt/.env
+else
+    printf '\nWDTT_INSTALL_MODE=%s\n' "$INSTALL_MODE" >> /etc/wdtt/.env
+fi
+chmod 600 /etc/wdtt/.env
 
 # 4. Сборка / установка бинарника WDTT
 echo -e "${CYAN}[4/6] Сборка и установка бинарника WDTT...${NC}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo " -> Сборка unified бинарника через Go..."
@@ -149,9 +182,16 @@ EOF
 
 # 5. Настройка systemd-сервиса
 echo -e "${CYAN}[5/6] Создание службы systemd...${NC}"
-cat << 'EOF' > /etc/systemd/system/wdtt.service
+SERVICE_FLAGS="-config-dir /etc/wdtt"
+SERVICE_POST=""
+if [ "$INSTALL_MODE" = "panel" ]; then
+    SERVICE_FLAGS="$SERVICE_FLAGS -panel-only"
+else
+    SERVICE_POST="ExecStartPost=-/usr/local/bin/wdtt-xray-rules.sh up"
+fi
+cat << EOF > /etc/systemd/system/wdtt.service
 [Unit]
-Description=WDTT Unified VPN and Web Panel (RAW & UDP)
+Description=WDTT Panel (${INSTALL_MODE})
 After=network.target
 Wants=mongod.service
 
@@ -160,8 +200,8 @@ Type=simple
 User=root
 WorkingDirectory=/etc/wdtt
 EnvironmentFile=-/etc/wdtt/.env
-ExecStart=/usr/local/bin/wdtt-app -config-dir /etc/wdtt
-ExecStartPost=-/usr/local/bin/wdtt-xray-rules.sh up
+ExecStart=/usr/local/bin/wdtt-app ${SERVICE_FLAGS}
+${SERVICE_POST}
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
@@ -175,7 +215,7 @@ systemctl daemon-reload
 systemctl enable wdtt.service
 systemctl restart wdtt.service
 sleep 3
-if [ -x /usr/local/bin/wdtt-xray-rules.sh ]; then
+if [ "$INSTALL_MODE" = "panel-node" ] && [ -x /usr/local/bin/wdtt-xray-rules.sh ]; then
     /usr/local/bin/wdtt-xray-rules.sh up || true
 fi
 
@@ -184,13 +224,17 @@ echo -e "${CYAN}[6/6] Настройка фаервола (открытие по
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
     ufw allow 2860/tcp comment "WDTT Panel" >/dev/null 2>&1 || true
     ufw allow 2096/tcp comment "WDTT Subscription" >/dev/null 2>&1 || true
-    ufw allow 56000/udp comment "WDTT DTLS" >/dev/null 2>&1 || true
-    ufw allow 56003/udp comment "WDTT RAW Direct" >/dev/null 2>&1 || true
+    if [ "$INSTALL_MODE" = "panel-node" ]; then
+        ufw allow 56000/udp comment "WDTT DTLS" >/dev/null 2>&1 || true
+        ufw allow 56003/udp comment "WDTT RAW Direct" >/dev/null 2>&1 || true
+    fi
 elif command -v iptables >/dev/null 2>&1; then
     iptables -C INPUT -p tcp --dport 2860 -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport 2860 -j ACCEPT
     iptables -C INPUT -p tcp --dport 2096 -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport 2096 -j ACCEPT
-    iptables -C INPUT -p udp --dport 56000 -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport 56000 -j ACCEPT
-    iptables -C INPUT -p udp --dport 56003 -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport 56003 -j ACCEPT
+    if [ "$INSTALL_MODE" = "panel-node" ]; then
+        iptables -C INPUT -p udp --dport 56000 -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport 56000 -j ACCEPT
+        iptables -C INPUT -p udp --dport 56003 -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport 56003 -j ACCEPT
+    fi
 fi
 
 IP=$(curl -4 -s --max-time 3 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
@@ -203,7 +247,10 @@ echo -e " Веб-панель:          ${CYAN}http://${IP}:2860/wdtt/${NC}"
 echo -e " Логин по умолчанию:  ${BOLD}admin${NC}"
 echo -e " Пароль по умолчанию: ${BOLD}wdtt${NC}"
 echo ""
-echo -e " Порты подключения:   ${BLUE}56000/udp${NC} (DTLS) | ${BLUE}56003/udp${NC} (RAW Direct)"
+echo -e " Режим установки:     ${BLUE}${INSTALL_MODE}${NC}"
+if [ "$INSTALL_MODE" = "panel-node" ]; then
+    echo -e " Порты подключения:   ${BLUE}56000/udp${NC} (DTLS) | ${BLUE}56003/udp${NC} (RAW Direct)"
+fi
 echo -e " База данных:         ${GREEN}MongoDB (mongodb://127.0.0.1:27017/wdtt)${NC}"
 echo -e " Управление:          ${BOLD}wdtt${NC} (алиас и интерактивное меню)"
 echo ""

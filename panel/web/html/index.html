@@ -26,6 +26,20 @@
     height: auto !important;
     min-height: 0;
   }
+  .index-page .console-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin:0 0 18px; }
+  .index-page .console-heading h1 { margin:0; font-size:26px; font-weight:750; line-height:1.2; }
+  .index-page .console-heading p { margin:5px 0 0; opacity:.55; }
+  .index-page .resource-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+  .index-page .resource-card { min-height:136px; border:1px solid #30352e; border-radius:17px; background:#20231f; padding:18px 20px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .index-page .resource-card .resource-icon { width:36px; height:36px; border-radius:11px; display:grid; place-items:center; color:#f46b17; background:rgba(244,107,23,.13); font-size:17px; }
+  .index-page .resource-card .resource-label { color:#a2aaa0; font-size:13px; margin:11px 0 3px; }
+  .index-page .resource-card strong { display:block; font-size:25px; letter-spacing:-.03em; }
+  .index-page .resource-card small { display:block; color:#889187; margin-top:4px; }
+  .index-page .resource-card .ant-progress-text { color:#e9ebe7; font-size:12px; }
+  .index-page .resource-chart { margin-top:14px; border:1px solid #30352e; border-radius:17px; background:#20231f; padding:18px 20px 12px; }
+  .index-page .resource-chart-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .index-page .resource-chart h2 { margin:0; font-size:15px; }
+  @media (max-width:700px) { .index-page .resource-grid { grid-template-columns:1fr; gap:9px; } .index-page .resource-card { min-height:112px; padding:14px; } }
   .index-page .action-card > .ant-card-body {
     display: none;
     padding: 0;
@@ -130,64 +144,16 @@
             message='{{ i18n "secAlertTitle" }}' color="red"
             description='{{ i18n "secAlertSsl" }}' show-icon closable>
           </a-alert>
+        <div class="console-heading"><div><h1>Панель управления</h1><p>Состояние сервера и подключений</p></div><a-button size="small" icon="reload" @click="getStatus">Обновить</a-button></div>
         <a-row class="dashboard-grid" :gutter="isMobile ? 8 : 16">
               <a-col :span="24">
-                <a-card hoverable>
-                  <a-row :gutter="[0, isMobile ? 16 : 0]">
-                    <a-col :sm="24" :md="12">
-                      <a-row>
-                        <a-col :span="12" class="text-center">
-                          <a-progress type="dashboard" status="normal" :stroke-color="status.cpu.color"
-                            :percent="status.cpu.percent"></a-progress>
-                          <div>
-                            <b>{{ i18n "pages.index.cpu" }}:</b> [[ CPUFormatter.cpuCoreFormat(status.cpuCores) ]]
-                            <a-tooltip>
-                              <a-icon type="area-chart"></a-icon>
-                              <template slot="title">
-                                <div><b>{{ i18n "pages.index.logicalProcessors" }}:</b> [[ (status.logicalPro) ]]</div>
-                                <div><b>{{ i18n "pages.index.frequency" }}:</b> [[
-                                  CPUFormatter.cpuSpeedFormat(status.cpuSpeedMhz) ]]</div>
-                              </template>
-                            </a-tooltip>
-                            <a-tooltip :overlay-class-name="themeSwitcher.currentTheme">
-                              <a-button size="small" shape="circle" class="ml-8" @click="openCpuHistory()">
-                                <a-icon type="history" />
-                              </a-button>
-                            </a-tooltip>
-                          </div>
-                        </a-col>
-                        <a-col :span="12" class="text-center">
-                          <a-progress type="dashboard" status="normal" :stroke-color="status.mem.color"
-                            :percent="status.mem.percent"></a-progress>
-                          <div>
-                            <b>{{ i18n "pages.index.memory"}}:</b> [[ SizeFormatter.sizeFormat(status.mem.current) ]] /
-                            [[ SizeFormatter.sizeFormat(status.mem.total) ]]
-                          </div>
-                        </a-col>
-                      </a-row>
-                    </a-col>
-                    <a-col :sm="24" :md="12">
-                      <a-row>
-                        <a-col :span="12" class="text-center">
-                          <a-progress type="dashboard" status="normal" :stroke-color="status.swap.color"
-                            :percent="status.swap.percent"></a-progress>
-                          <div>
-                            <b>{{ i18n "pages.index.swap" }}:</b> [[ SizeFormatter.sizeFormat(status.swap.current) ]] /
-                            [[ SizeFormatter.sizeFormat(status.swap.total) ]]
-                          </div>
-                        </a-col>
-                        <a-col :span="12" class="text-center">
-                          <a-progress type="dashboard" status="normal" :stroke-color="status.disk.color"
-                            :percent="status.disk.percent"></a-progress>
-                          <div>
-                            <b>{{ i18n "pages.index.storage"}}:</b> [[ SizeFormatter.sizeFormat(status.disk.current) ]]
-                            / [[ SizeFormatter.sizeFormat(status.disk.total) ]]
-                          </div>
-                        </a-col>
-                      </a-row>
-                    </a-col>
-                  </a-row>
-                </a-card>
+                <div class="resource-grid">
+                  <div class="resource-card"><div><span class="resource-icon"><a-icon type="dashboard" /></span><div class="resource-label">CPU</div><strong>[[ status.cpu.percent ]]%</strong><small>[[ status.logicalPro ]] ядер</small></div><a-progress type="circle" :width="62" :percent="status.cpu.percent" stroke-color="#f46b17" /></div>
+                  <div class="resource-card"><div><span class="resource-icon"><a-icon type="database" /></span><div class="resource-label">RAM</div><strong>[[ SizeFormatter.sizeFormat(status.mem.current) ]]</strong><small>из [[ SizeFormatter.sizeFormat(status.mem.total) ]]</small></div><a-progress type="circle" :width="62" :percent="status.mem.percent" stroke-color="#f46b17" /></div>
+                  <div class="resource-card"><div><span class="resource-icon"><a-icon type="hdd" /></span><div class="resource-label">Диск</div><strong>[[ SizeFormatter.sizeFormat(status.disk.current) ]]</strong><small>из [[ SizeFormatter.sizeFormat(status.disk.total) ]]</small></div><a-progress type="circle" :width="62" :percent="status.disk.percent" stroke-color="#f46b17" /></div>
+                  <div class="resource-card"><div><span class="resource-icon"><a-icon type="cloud-upload" /></span><div class="resource-label">Общий трафик</div><strong>[[ SizeFormatter.sizeFormat(status.netTraffic.sent + status.netTraffic.recv) ]]</strong><small>↑ [[ SizeFormatter.sizeFormat(status.netTraffic.sent) ]] · ↓ [[ SizeFormatter.sizeFormat(status.netTraffic.recv) ]]</small></div></div>
+                </div>
+                <div class="resource-chart"><div class="resource-chart-head"><h2>Нагрузка CPU</h2><a-button size="small" type="link" @click="openCpuHistory">История</a-button></div><sparkline :data="cpuHistory" :vb-width="840" :height="90" stroke="#f46b17" :stroke-width="2.2" :fill-opacity="0.14" :show-grid="false" :show-axes="false" :show-tooltip="false"></sparkline></div>
               </a-col>
               <a-col :xs="24" :sm="24" :lg="12">
                 <a-card hoverable class="wdtt-card">
@@ -224,22 +190,19 @@
               </a-col>
 
               <a-col :xs="24" :sm="24" :lg="12">
-                <a-card hoverable title="Кластер VPS-нод и MongoDB">
-                  <template #extra>
-                    <a-tag color="green"><a-badge status="processing" style="margin-right:4px;" />MongoDB v8.0</a-tag>
-                  </template>
+                <a-card title="Ноды и хранилище">
                   <div style="display:flex; justify-content:space-around; align-items:center; padding:16px 0;">
                     <div style="text-align:center;">
                       <div style="font-size:12px; color:#888;">VPS-ноды</div>
-                      <div style="font-size:20px; font-weight:700; color:#10b981;">Кластер активен</div>
+                      <div style="font-size:20px; font-weight:700; color:#f46b17;">Управление нодами</div>
                     </div>
                     <div style="text-align:center;">
                       <div style="font-size:12px; color:#888;">База данных</div>
-                      <div style="font-size:20px; font-weight:700; color:#6366f1;">MongoDB</div>
+                      <div style="font-size:20px; font-weight:700;">MongoDB / SQLite</div>
                     </div>
                     <div style="text-align:center;">
                       <div style="font-size:12px; color:#888;">Лимиты</div>
-                      <div style="font-size:20px; font-weight:700; color:#f59e0b;">Безлимит (∞)</div>
+                      <div style="font-size:20px; font-weight:700;">В настройках</div>
                     </div>
                   </div>
                   <template #actions>
@@ -1107,7 +1070,7 @@
       showAlert: false,
       showIp: false,
       ipLimitEnable: false,
-      dashboardPollMs: 2000,
+      dashboardPollMs: 5000,
       customGeoColumns,
       customGeoList: [],
       customGeoLoading: false,
@@ -1176,7 +1139,7 @@
       startProcessPoll() {
         this.stopProcessPoll()
         this.fetchProcessList()
-        this.processPollTimer = setInterval(() => this.fetchProcessList(), 2000)
+        this.processPollTimer = setInterval(() => this.fetchProcessList(), 5000)
       },
       stopProcessPoll() {
         if (this.processPollTimer) {
@@ -1605,7 +1568,7 @@
         fileInput.click();
       },
       startPolling() {
-        const pollMs = Math.max(2000, Number(this.dashboardPollMs) || 2000);
+        const pollMs = Math.max(5000, Number(this.dashboardPollMs) || 5000);
         const pollInterval = setInterval(async () => {
           if (window.wsClient && window.wsClient.isConnected) {
             clearInterval(pollInterval);
@@ -1637,7 +1600,7 @@
       const msg = await settingsPromise;
       if (msg.success) {
         this.ipLimitEnable = msg.obj.ipLimitEnable;
-        this.dashboardPollMs = Math.max(2000, (Number(msg.obj.dashboardPollSec) || 2) * 1000);
+        this.dashboardPollMs = Math.max(5000, (Number(msg.obj.dashboardPollSec) || 5) * 1000);
       }
 
       if (window.wsClient) {

@@ -58,6 +58,7 @@ WDTT расширяет upstream: мультипользователи, Remnawav
 ```bash
 sudo bash setup.sh
 ```
+При интерактивной установке выберите «Только панель» или «Панель + нода». Для автоматизации: `sudo bash setup.sh --panel-only` либо `sudo bash setup.sh --panel-node`.
 Скрипт автоматически:
 1. Установит MongoDB (при необходимости) и зависимости.
 2. Скомпилирует или скачает unified-бинарник `wdtt`.
@@ -65,12 +66,15 @@ sudo bash setup.sh
 4. Настроит глобальный алиас командной строки `wdtt`.
 
 ### Вариант 2: Онлайн-установщик
-[Онлайн-установщик WDTT](https://github.com/ildarmaga/wdtt-install/blob/main/install.sh) запускается одной командой:
+[Онлайн-установщик с выбором режима](https://github.com/pythoneer-dev-q/NotAWDTT-panel/blob/main/install.sh) запускается одной командой:
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/ildarmaga/wdtt-install/main/install.sh)
+curl -fsSL https://raw.githubusercontent.com/pythoneer-dev-q/NotAWDTT-panel/main/install.sh | sudo bash
 ```
+Ссылка начнёт работать после публикации `install.sh` в доступной ветке `main` этого репозитория.
+Прежний [расширенный установщик](https://github.com/ildarmaga/wdtt-install/blob/main/install.sh) доступен отдельно.
 
 Для дополнительного VPS создайте ноду в панели и скопируйте её персональную команду из раздела «Ноды». Ключ подключения уже включён в команду; храните её как пароль.
+У ссылки VK Turn Proxy можно задать ремарку сервера в карточке пользователя: она добавится после `#`.
 
 Панель: `http://IP:2860/wdtt/` (или `/`) — логин `admin` / `wdtt` (смените в настройках).
 

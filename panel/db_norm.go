@@ -273,7 +273,9 @@ func savePanelConfigNorm(cfg *PanelConfig) error {
 	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		_ = m.SavePanelConfig(ctx, panelConfigToPaneldb(cfg))
+		if err := m.SavePanelConfig(ctx, panelConfigToPaneldb(cfg)); err != nil {
+			return fmt.Errorf("save panel config to MongoDB: %w", err)
+		}
 	}
 	if !panelDBEnabled() {
 		return nil

@@ -110,6 +110,9 @@ func waitServiceActive(name string, timeout time.Duration) bool {
 
 // ensureXrayFollowsWdtt поднимает Xray, если WDTT работает, а Xray случайно остался выключенным.
 func ensureXrayFollowsWdtt() {
+	if !localNodeEnabled() {
+		return
+	}
 	if xrayManuallyStopped.Load() {
 		return
 	}
@@ -127,6 +130,9 @@ func ensureXrayFollowsWdtt() {
 
 // refreshTunnelLocalServiceRules обновляет iptables для панели/подписки через VPN (порты из panel.db).
 func refreshTunnelLocalServiceRules() {
+	if !localNodeEnabled() {
+		return
+	}
 	script := wdttXrayRulesPath
 	if _, err := os.Stat(script); err != nil {
 		if _, err := os.Stat("scripts/wdtt-xray-rules.sh"); err == nil {

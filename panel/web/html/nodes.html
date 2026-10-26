@@ -9,6 +9,15 @@
   .nodes-page .ant-table-tbody > tr > td { padding: 10px 12px; }
   .nodes-page .node-actions { display: flex; flex-wrap: wrap; gap: 5px; }
   .nodes-page .node-actions .ant-btn { margin: 0; }
+  .nodes-page .node-list { display:grid; gap:10px; }
+  .nodes-page .node-row { border:1px solid #343a32; border-radius:13px; padding:14px 16px; display:grid; grid-template-columns:minmax(150px,1.3fr) minmax(150px,1fr) minmax(130px,.8fr) auto; gap:14px; align-items:center; }
+  .nodes-page .node-row.is-online { border-left:3px solid #f46b17; }
+  .nodes-page .node-row small { display:block; opacity:.55; margin-top:4px; }
+  .nodes-page .node-row-name { font-size:15px; font-weight:700; }
+  .nodes-page .node-row .node-endpoint { font-family:ui-monospace,Consolas,monospace; font-size:12px; }
+  .nodes-page .node-row .node-traffic { font-size:12px; opacity:.7; }
+  @media (max-width:1100px) { .nodes-page .node-row { grid-template-columns:1fr 1fr; } }
+  @media (max-width:650px) { .nodes-page .node-row { grid-template-columns:1fr; } }
   @media (max-width: 700px) {
     .nodes-page .ant-layout-content { margin: 8px; }
     .nodes-page .ant-table-content { overflow-x: auto; }
@@ -111,57 +120,16 @@
 
           <!-- Таблица нод -->
           <a-col :span="24">
-            <a-card title="Список серверов" hoverable>
-              <a-table :columns="columns" :data-source="nodes" :row-key="r => r.id" :pagination="false" size="middle">
-                <!-- Название -->
-                <template slot="name" slot-scope="text, row">
-                  <div style="font-weight:600;">
-                    [[ text ]]
-                    <a-tag v-if="row.is_local" color="purple" style="margin-left:6px;">Мастер (Панель)</a-tag>
-                  </div>
-                  <div class="text-muted" style="font-size:12px;">ID: [[ row.id ]]</div>
-                </template>
-
-                <!-- Статус -->
-                <template slot="status" slot-scope="text, row">
-                  <a-tag :color="row.status === 'online' ? 'green' : (row.status === 'disabled' ? 'default' : 'red')">
-                    <a-badge :status="row.status === 'online' ? 'processing' : 'error'" style="margin-right:4px;" />
-                    [[ row.status === 'online' ? 'Online' : (row.status === 'disabled' ? 'Выключена' : 'Offline') ]]
-                  </a-tag>
-                  <span v-if="row.latency" style="font-size:12px; margin-left:4px;" class="text-muted">
-                    ([[ row.latency ]] ms)
-                  </span>
-                </template>
-
-                <!-- Хост и порты -->
-                <template slot="endpoints" slot-scope="_, row">
-                  <div><code>[[ row.host || serverIP ]]</code></div>
-                  <div style="margin-top:4px;">
-                    <a-tag color="blue">UDP [[ row.dtls_port || 56000 ]]</a-tag>
-                    <a-tag color="orange">RAW [[ row.raw_port || 56003 ]]</a-tag>
-                  </div>
-                </template>
-
-                <!-- Онлайн и трафик -->
-                <template slot="traffic" slot-scope="_, row">
-                  <div>Онлайн: <a-tag color="cyan">[[ row.online_users || 0 ]]</a-tag></div>
-                  <div class="text-muted" style="font-size:12px; margin-top:2px;">
-                    ↑ [[ formatBytes(row.traffic_up || 0) ]] · ↓ [[ formatBytes(row.traffic_down || 0) ]]
-                  </div>
-                </template>
-
-                <!-- Действия -->
-                <template slot="actions" slot-scope="_, row">
-                  <div class="node-actions">
-                    <a-button size="small" icon="wifi" @click="pingNode(row)" :loading="row.pinging">DNS</a-button>
-                    <a-button v-if="!row.is_local" size="small" icon="code" @click="showInstallCmd(row)">Установить</a-button>
-                    <a-button size="small" icon="edit" @click="openEditModal(row)">Изменить</a-button>
-                    <a-popconfirm v-if="!row.is_local" title="Удалить эту ноду?" ok-text="Да" cancel-text="Отмена" @confirm="deleteNode(row.id)">
-                      <a-button size="small" type="danger" icon="delete">Удалить</a-button>
-                    </a-popconfirm>
-                  </div>
-                </template>
-              </a-table>
+            <a-card title="Серверы кластера">
+              <div v-if="!nodes.length" class="text-muted">Ноды ещё не добавлены.</div>
+              <div class="node-list">
+                <div class="node-row" :class="{'is-online': row.status === 'online'}" v-for="row in nodes" :key="row.id">
+                  <div><div class="node-row-name">[[ row.name ]] <a-tag v-if="row.is_local" color="orange">Панель</a-tag></div><small>[[ row.id ]]</small></div>
+                  <div><div class="node-endpoint">[[ row.host || serverIP ]]</div><small>UDP [[ row.dtls_port || 56000 ]] · RAW [[ row.raw_port || 56003 ]]</small></div>
+                  <div><a-tag :color="row.status === 'online' ? 'green' : 'default'">[[ row.status === 'online' ? 'Онлайн' : (row.status === 'disabled' ? 'Выключена' : 'Нет связи') ]]</a-tag><div class="node-traffic">[[ row.online_users || 0 ]] сессий · [[ formatBytes((row.traffic_up || 0) + (row.traffic_down || 0)) ]]</div></div>
+                  <div class="node-actions"><a-button size="small" icon="wifi" @click="pingNode(row)" :loading="row.pinging">DNS</a-button><a-button v-if="!row.is_local" size="small" icon="download" @click="showInstallCmd(row)">Установить</a-button><a-button size="small" icon="edit" @click="openEditModal(row)"></a-button><a-popconfirm v-if="!row.is_local" title="Удалить ноду?" ok-text="Да" cancel-text="Нет" @confirm="deleteNode(row.id)"><a-button size="small" icon="delete"></a-button></a-popconfirm></div>
+                </div>
+              </div>
             </a-card>
           </a-col>
         </a-row>

@@ -3,20 +3,20 @@ package panel
 import "sync"
 
 const (
-	defaultDashboardPollSec    = 2
-	defaultUsersPollSec        = 5
-	defaultConnectionsPollSec  = 5
-	minDashboardPollSec        = 2
-	maxDashboardPollSec        = 120
-	minPagePollSec             = 3
-	maxPagePollSec             = 120
+	defaultDashboardPollSec   = 5
+	defaultUsersPollSec       = 5
+	defaultConnectionsPollSec = 5
+	minDashboardPollSec       = 5
+	maxDashboardPollSec       = 120
+	minPagePollSec            = 3
+	maxPagePollSec            = 120
 )
 
 var (
-	pollDefaultsMu       sync.RWMutex
-	dashboardPollSec     = defaultDashboardPollSec
-	usersPollSec         = defaultUsersPollSec
-	connectionsPollSec   = defaultConnectionsPollSec
+	pollDefaultsMu     sync.RWMutex
+	dashboardPollSec   = defaultDashboardPollSec
+	usersPollSec       = defaultUsersPollSec
+	connectionsPollSec = defaultConnectionsPollSec
 )
 
 func clampDashboardPollSec(v int) int {
@@ -46,6 +46,7 @@ func syncPanelPollDefaults(cfg *PanelConfig) {
 	pollDefaultsMu.Lock()
 	defer pollDefaultsMu.Unlock()
 	dashboardPollSec = clampDashboardPollSec(cfg.DashboardPollSec)
+	cfg.DashboardPollSec = dashboardPollSec
 	usersPollSec = clampPagePollSec(cfg.UsersPollSec)
 	connectionsPollSec = clampPagePollSec(cfg.ConnectionsPollSec)
 }

@@ -313,7 +313,7 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		if nodes, err := m.ListNodes(ctx); err == nil && len(nodes) > 0 {
 			for _, n := range nodes {
-				if !n.IsActive {
+				if !n.IsActive || (n.IsLocal && !localNodeEnabled()) {
 					continue
 				}
 				h := n.Host
@@ -321,13 +321,16 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request) {
 					h = linkHost
 				}
 				nodeInbound := inbound
+				nodeInbound.ServerHost = h
 				nodeInbound.DtlsPort = n.DtlsPort
 				nodeInbound.RawDirectPort = n.RawPort
+				nodeEntry := *info.Entry
+				nodeEntry.Ports = "" // node endpoints override primary-server user port defaults
 				nodeTitle := n.Name
 				if nodeTitle == "" {
 					nodeTitle = a.cfg.SubTitle
 				}
-				if nl, err := buildWdttShareLink(h, info.Password, info.Email, nodeTitle, "", info.Entry.VkHash, info.Entry, nodeInbound, subURL); err == nil && nl != "" {
+				if nl, err := buildWdttShareLink(h, info.Password, info.Email, nodeTitle, "", info.Entry.VkHash, &nodeEntry, nodeInbound, subURL); err == nil && nl != "" {
 					allLinks = append(allLinks, nl)
 					linkTitles = append(linkTitles, nodeTitle)
 				}
@@ -335,6 +338,14 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(allLinks) == 0 {
+		if !localNodeEnabled() {
+			if subscriptionWantsHTML(r) {
+				a.serveSubInfoPage(w, r, subID, info, nil, nil)
+			} else {
+				http.Error(w, "no active nodes", http.StatusServiceUnavailable)
+			}
+			return
+		}
 		allLinks = []string{link}
 		linkTitles = []string{"WDTT"}
 	}

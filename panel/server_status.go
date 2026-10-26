@@ -43,18 +43,18 @@ type serverStatus struct {
 		Uptime   uint64       `json:"uptime"`
 	} `json:"xray"`
 	Wdtt struct {
-		State       processState `json:"state"`
-		ErrorMsg    string       `json:"errorMsg"`
-		ActiveUsers int          `json:"activeUsers"`
-		Sessions    int          `json:"sessions"`
-		Iface       string       `json:"iface"`
-		MainPass    string       `json:"mainPassword"`
-		DownGB      string       `json:"downGB"`
-		UpGB        string       `json:"upGB"`
-		DownBytes   int64        `json:"downBytes"`
-		UpBytes     int64        `json:"upBytes"`
-		Uptime      uint64       `json:"uptime"`
-		ServerUptime uint64      `json:"serverUptime"`
+		State        processState `json:"state"`
+		ErrorMsg     string       `json:"errorMsg"`
+		ActiveUsers  int          `json:"activeUsers"`
+		Sessions     int          `json:"sessions"`
+		Iface        string       `json:"iface"`
+		MainPass     string       `json:"mainPassword"`
+		DownGB       string       `json:"downGB"`
+		UpGB         string       `json:"upGB"`
+		DownBytes    int64        `json:"downBytes"`
+		UpBytes      int64        `json:"upBytes"`
+		Uptime       uint64       `json:"uptime"`
+		ServerUptime uint64       `json:"serverUptime"`
 	} `json:"wdtt"`
 	Uptime   uint64    `json:"uptime"`
 	Loads    []float64 `json:"loads"`
@@ -107,8 +107,6 @@ func startStatusCollector() {
 	refreshCachedStatus()
 	go func() {
 		for {
-			ensureXrayFollowsWdtt()
-			refreshCachedStatus()
 			pollDefaultsMu.RLock()
 			sec := dashboardPollSec
 			pollDefaultsMu.RUnlock()
@@ -116,6 +114,8 @@ func startStatusCollector() {
 				sec = minDashboardPollSec
 			}
 			time.Sleep(time.Duration(sec) * time.Second)
+			ensureXrayFollowsWdtt()
+			refreshCachedStatus()
 		}
 	}()
 	go func() {
@@ -214,6 +214,10 @@ func fillXrayStatus(s *serverStatus) {
 }
 
 func fillWdttStatus(s *serverStatus) {
+	if !localNodeEnabled() {
+		s.Wdtt.State = stateStop
+		return
+	}
 	stats := loadServerStats()
 	db, _ := loadPasswordsCached()
 	if serviceActive(wdttServiceUnit) {
@@ -609,4 +613,3 @@ func max(a, b int) int {
 	}
 	return b
 }
-

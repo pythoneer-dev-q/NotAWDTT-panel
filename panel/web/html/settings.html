@@ -145,7 +145,7 @@
       this.subAnnounce = data.subAnnounce || "";
       this.subURI = data.subURI || "";
       this.subShowInfo = data.subShowInfo !== false;
-      this.dashboardPollSec = Number(data.dashboardPollSec) || 2;
+      this.dashboardPollSec = Number(data.dashboardPollSec) || 5;
       this.usersPollSec = Number(data.usersPollSec) || 5;
       this.connectionsPollSec = Number(data.connectionsPollSec) || 5;
     }
@@ -175,7 +175,7 @@
         subAnnounce: String(this.subAnnounce || ''),
         subURI: String(this.subURI || ''),
         subShowInfo: !!this.subShowInfo,
-        dashboardPollSec: Number(this.dashboardPollSec) || 2,
+        dashboardPollSec: Number(this.dashboardPollSec) || 5,
         usersPollSec: Number(this.usersPollSec) || 5,
         connectionsPollSec: Number(this.connectionsPollSec) || 5,
       };

@@ -27,6 +27,7 @@ func main() {
 		return
 	}
 	noPanel := false
+	panelOnly := false
 	nodeSync := ""
 	nodeToken := ""
 	nodeConfig := ""
@@ -36,6 +37,8 @@ func main() {
 		switch arg {
 		case "-no-panel":
 			noPanel = true
+		case "-panel-only":
+			panelOnly = true
 		case "-node-sync":
 			if i+1 < len(os.Args) {
 				nodeSync = os.Args[i+1]
@@ -90,6 +93,14 @@ func main() {
 		}
 	}
 
+	if panelOnly {
+		panel.InitUnifiedLogSink()
+		panel.ConfigureLogLevel()
+		if err := panel.Run(); err != nil {
+			log.Fatalf("[PANEL] ERROR %v", err)
+		}
+		return
+	}
 	if !noPanel {
 		panel.InitUnifiedLogSink()
 		panel.ConfigureLogLevel()
@@ -103,6 +114,5 @@ func main() {
 	if noPanel {
 		panel.ConfigureLogLevel()
 	}
-
 	server.Run()
 }

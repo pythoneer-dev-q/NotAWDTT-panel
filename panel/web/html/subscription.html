@@ -3,7 +3,7 @@
 <script src="{{ .base_path }}assets/ant-design-vue/antd.min.js"></script>
 <script src="{{ .base_path }}assets/js/util/index.js?{{ .cur_ver }}"></script>
 <style>
-  .subscription-page { --sub-accent:#00a88a; --sub-border:#dce8e5; --sub-muted:#667c79; }
+  .subscription-page { --sub-accent:#f46b17; --sub-border:#e5dfd5; --sub-muted:#746f68; }
   .subscription-page .ant-layout-content { overflow-y:auto; padding:24px 16px; }
   .sub-shell { max-width:930px; margin:0 auto; }
   .sub-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px; }
@@ -22,15 +22,15 @@
   .sub-metric { border:1px solid var(--sub-border); border-radius:10px; padding:12px; min-width:0; }
   .sub-metric span { display:block; color:var(--sub-muted); font-size:12px; margin-bottom:5px; }
   .sub-metric strong { display:block; font-size:16px; overflow-wrap:anywhere; }
-  .sub-progress { height:6px; border-radius:99px; background:#e6f2ef; overflow:hidden; margin:16px 0 2px; }
+  .sub-progress { height:6px; border-radius:99px; background:#3c3128; overflow:hidden; margin:16px 0 2px; }
   .sub-progress span { display:block; height:100%; border-radius:inherit; background:var(--sub-accent); }
   .sub-link-row { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--sub-border); }
   .sub-link-row:first-of-type { border-top:0; }
   .sub-link-name { width:145px; flex:none; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .sub-link-row code { flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:var(--sub-muted); }
-  .subscription-page.dark { --sub-border:#30433f; --sub-muted:#a3b8b2; }
-  .subscription-page.dark .sub-panel { background:#172522; }
-  .subscription-page.dark .sub-primary-link code, .subscription-page.dark .sub-metric { background:#1d302b; }
+  .subscription-page.dark { --sub-border:#343a32; --sub-muted:#a4aaa0; background:#171917; }
+  .subscription-page.dark .sub-panel { background:#20231f; }
+  .subscription-page.dark .sub-primary-link code, .subscription-page.dark .sub-metric { background:#252923; }
   @media (max-width:650px) { .subscription-page .ant-layout-content { padding:14px 10px; } .sub-panel { padding:16px; } .sub-hero { grid-template-columns:1fr; } .sub-qr { width:max-content; } .sub-metrics { grid-template-columns:repeat(2,1fr); } .sub-link-name { width:90px; } .sub-link-row code { display:none; } .sub-link-row .ant-btn { margin-left:auto; } }
 </style>
 {{ template "page/head_end" .}}
@@ -70,6 +70,7 @@
         <h2 class="sub-section-title">Подключения</h2>
         <div class="sub-link-row" v-for="(link, idx) in links" :key="idx"><div class="sub-link-name" :title="linkName(link, idx)">[[ linkName(link, idx) ]]</div><code :title="link">[[ link ]]</code><a-button size="small" icon="copy" @click="copy(link)">{{ i18n "copy" }}</a-button></div>
       </section>
+      <section class="sub-panel" v-else>Активных нод пока нет. Подключение появится после добавления сервера.</section>
     </main>
   </a-layout-content>
 </a-layout>

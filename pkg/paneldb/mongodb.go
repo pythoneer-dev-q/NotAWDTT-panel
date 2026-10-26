@@ -296,9 +296,9 @@ func (m *MongoDB) UpdateNodeHeartbeat(ctx context.Context, apiKey string, online
 	now := time.Now().Unix()
 	update := bson.M{
 		"$set": bson.M{
-			"last_seen_at":  now,
-			"status":        "online",
-			"online_users":  onlineUsers,
+			"last_seen_at": now,
+			"status":       "online",
+			"online_users": onlineUsers,
 		},
 		"$inc": bson.M{
 			"traffic_up":   upDelta,
@@ -701,10 +701,7 @@ func (m *MongoDB) LoadPanelConfig(ctx context.Context) (*PanelConfig, error) {
 	var cfg PanelConfig
 	err := m.db.Collection("panel_config").FindOne(ctx, bson.M{"_id": 1}).Decode(&cfg)
 	if err != nil {
-		// Дефолтный конфиг панели
-		def := DefaultPanelConfig()
-		_ = m.SavePanelConfig(ctx, def)
-		return def, nil
+		return nil, err
 	}
 	return &cfg, nil
 }
@@ -823,8 +820,11 @@ func (m *MongoDB) MigrateFromSQLite(sqlitePath string) error {
 	defer cancel()
 
 	count, err := m.db.Collection("users").CountDocuments(ctx, bson.M{})
-	if err != nil || count > 0 {
-		return nil // MongoDB уже заполнена или недоступна
+	if err != nil {
+		return fmt.Errorf("check MongoDB migration state: %w", err)
+	}
+	if count > 0 {
+		return nil // MongoDB уже заполнена
 	}
 
 	if sqlitePath == "" {
@@ -851,9 +851,16 @@ func (m *MongoDB) MigrateFromSQLite(sqlitePath string) error {
 	}
 
 	if cfg, err := LoadPanelConfig(sqlDB); err == nil && cfg != nil {
-		_ = m.SavePanelConfig(ctx, cfg)
+		configCount, err := m.db.Collection("panel_config").CountDocuments(ctx, bson.M{})
+		if err != nil {
+			return fmt.Errorf("check panel config migration state: %w", err)
+		}
+		if configCount == 0 {
+			if err := m.SavePanelConfig(ctx, cfg); err != nil {
+				return fmt.Errorf("migrate panel config: %w", err)
+			}
+		}
 	}
 
 	return nil
 }
-

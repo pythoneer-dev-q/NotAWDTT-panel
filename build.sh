@@ -17,7 +17,7 @@ ensure_go() {
     x86_64) arch="amd64" ;;
     aarch64|arm64) arch="arm64" ;;
   esac
-  local go_ver="1.23.2"
+  local go_ver="1.25.14"
   local tarball="go${go_ver}.linux-${arch}.tar.gz"
   echo " -> Загрузка Go ${go_ver} (${arch})..."
   mkdir -p /tmp

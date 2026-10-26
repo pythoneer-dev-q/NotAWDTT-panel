@@ -88,7 +88,7 @@ func buildAllSubscriptionLinks(linkHost, password, remark, vpnTitle string, entr
 		{"WDTT JSON", jsonLink},
 		{"iOS — VK Turn Proxy", sharelink.BuildColonLink(sharelink.ColonLinkParams{
 			Host: base.Host, Password: base.Password, Name: base.Name, VkHash: base.VkHash,
-			DtlsPort: base.DtlsPort, WgPort: base.WgPort, HashLimit: 1,
+			DtlsPort: base.DtlsPort, WgPort: base.WgPort, HashLimit: 1, WithName: true,
 		})},
 		{"Android — WDTT", sharelink.BuildColonLink(sharelink.ColonLinkParams{
 			Host: base.Host, Password: base.Password, Name: base.Name, VkHash: base.VkHash,

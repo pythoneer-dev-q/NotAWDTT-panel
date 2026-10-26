@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ildarmaga/wdtt/pkg/paneldb"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -107,7 +108,36 @@ func ResetAdminCredentials(username, password string) error {
 	cfg.Username = username
 	cfg.PasswordHash = string(hash)
 	cfg.SessionKey = randomHex(32)
-	return savePanelConfig(cfg)
+	if err := saveAdminConfig(cfg); err != nil {
+		return err
+	}
+	stored, err := loadPanelConfigFromDB()
+	if err != nil {
+		return fmt.Errorf("verify admin password: %w", err)
+	}
+	if stored.Username != username || bcrypt.CompareHashAndPassword([]byte(stored.PasswordHash), []byte(password)) != nil {
+		return fmt.Errorf("admin password was not persisted")
+	}
+	return nil
+}
+
+func saveAdminConfig(cfg *PanelConfig) error {
+	if strings.TrimSpace(os.Getenv("MONGODB_URI")) != "" || strings.TrimSpace(os.Getenv("MONGO_URI")) != "" || strings.TrimSpace(os.Getenv("DATABASE_URL")) != "" {
+		if _, err := paneldb.GetDefaultMongo(); err != nil {
+			return fmt.Errorf("MongoDB unavailable; admin credentials were not changed: %w", err)
+		}
+	}
+	if err := savePanelConfig(cfg); err != nil {
+		return err
+	}
+	stored, err := loadPanelConfigFromDB()
+	if err != nil {
+		return fmt.Errorf("verify saved admin config: %w", err)
+	}
+	if stored.Username != cfg.Username || stored.PasswordHash != cfg.PasswordHash || stored.SessionKey != cfg.SessionKey {
+		return fmt.Errorf("admin credentials were not persisted")
+	}
+	return nil
 }
 
 func finalizePanelConfig(cfg *PanelConfig) (*PanelConfig, error) {

@@ -23,6 +23,10 @@ func randomToken(n int) string {
 	return hex.EncodeToString(b)
 }
 
+func localNodeEnabled() bool {
+	return os.Getenv("WDTT_INSTALL_MODE") != "panel"
+}
+
 var installerHostPattern = regexp.MustCompile(`^[A-Za-z0-9.:[\]-]+$`)
 
 func shellQuote(value string) string {
@@ -50,6 +54,15 @@ func (a *App) handleNodesList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		jsonError(w, err.Error(), 500)
 		return
+	}
+	if !localNodeEnabled() {
+		filtered := nodes[:0]
+		for _, n := range nodes {
+			if !n.IsLocal {
+				filtered = append(filtered, n)
+			}
+		}
+		nodes = filtered
 	}
 
 	// Обновляем статус локальной ноды

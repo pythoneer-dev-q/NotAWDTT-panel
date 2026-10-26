@@ -47,4 +47,9 @@ func TestBuildAllSubscriptionLinks(t *testing.T) {
 	if !foundQwdtt {
 		t.Fatalf("missing qwdtt link: %v", links)
 	}
+	for i, title := range titles {
+		if title == "iOS — VK Turn Proxy" && !strings.HasSuffix(links[i], "#TestUser") {
+			t.Fatalf("iOS link missing server remark: %q", links[i])
+		}
+	}
 }

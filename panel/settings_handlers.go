@@ -14,30 +14,30 @@ import (
 )
 
 type panelSettingsReq struct {
-	WebListen     string `json:"webListen"`
-	WebDomain     string `json:"webDomain"`
-	WebPort       int    `json:"webPort"`
-	WebBasePath   string `json:"webBasePath"`
-	SessionMaxAge int    `json:"sessionMaxAge"`
-	PageSize      int    `json:"pageSize"`
-	RemarkModel   string `json:"remarkModel"`
-	WebCertFile   string `json:"webCertFile"`
-	WebKeyFile    string `json:"webKeyFile"`
-	BlockPing     bool   `json:"blockPing"`
-	SubEnable     bool   `json:"subEnable"`
-	SubListen     string `json:"subListen"`
-	SubPort       int    `json:"subPort"`
-	SubPath       string `json:"subPath"`
-	SubDomain     string `json:"subDomain"`
-	SubCertFile   string `json:"subCertFile"`
-	SubKeyFile    string `json:"subKeyFile"`
-	SubEncrypt    bool   `json:"subEncrypt"`
-	SubTitle      string `json:"subTitle"`
-	SubSupportURL string `json:"subSupportUrl"`
-	SubProfileURL string `json:"subProfileUrl"`
-	SubAnnounce   string `json:"subAnnounce"`
-	SubURI        string `json:"subURI"`
-	SubShowInfo   bool   `json:"subShowInfo"`
+	WebListen          string `json:"webListen"`
+	WebDomain          string `json:"webDomain"`
+	WebPort            int    `json:"webPort"`
+	WebBasePath        string `json:"webBasePath"`
+	SessionMaxAge      int    `json:"sessionMaxAge"`
+	PageSize           int    `json:"pageSize"`
+	RemarkModel        string `json:"remarkModel"`
+	WebCertFile        string `json:"webCertFile"`
+	WebKeyFile         string `json:"webKeyFile"`
+	BlockPing          bool   `json:"blockPing"`
+	SubEnable          bool   `json:"subEnable"`
+	SubListen          string `json:"subListen"`
+	SubPort            int    `json:"subPort"`
+	SubPath            string `json:"subPath"`
+	SubDomain          string `json:"subDomain"`
+	SubCertFile        string `json:"subCertFile"`
+	SubKeyFile         string `json:"subKeyFile"`
+	SubEncrypt         bool   `json:"subEncrypt"`
+	SubTitle           string `json:"subTitle"`
+	SubSupportURL      string `json:"subSupportUrl"`
+	SubProfileURL      string `json:"subProfileUrl"`
+	SubAnnounce        string `json:"subAnnounce"`
+	SubURI             string `json:"subURI"`
+	SubShowInfo        bool   `json:"subShowInfo"`
 	DashboardPollSec   int    `json:"dashboardPollSec"`
 	UsersPollSec       int    `json:"usersPollSec"`
 	ConnectionsPollSec int    `json:"connectionsPollSec"`
@@ -265,21 +265,28 @@ func (a *App) handleSettingUpdateUser(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, i18nWeb("pages.settings.toasts.originalUserPassIncorrect"), 401)
 		return
 	}
+	next := *a.cfg
 	if req.NewPassword != "" {
+		if len([]byte(req.NewPassword)) > 72 {
+			jsonError(w, "Пароль не должен превышать 72 байта", 400)
+			return
+		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 		if err != nil {
 			jsonError(w, err.Error(), 500)
 			return
 		}
-		a.cfg.PasswordHash = string(hash)
+		next.PasswordHash = string(hash)
+		next.SessionKey = randomHex(32)
 	}
 	if strings.TrimSpace(req.NewUsername) != "" {
-		a.cfg.Username = strings.TrimSpace(req.NewUsername)
+		next.Username = strings.TrimSpace(req.NewUsername)
 	}
-	if err := savePanelConfig(a.cfg); err != nil {
+	if err := saveAdminConfig(&next); err != nil {
 		jsonError(w, err.Error(), 500)
 		return
 	}
+	*a.cfg = next
 	jsonOK(w, nil)
 }
 

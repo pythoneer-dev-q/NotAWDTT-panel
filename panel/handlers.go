@@ -88,14 +88,17 @@ func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
 	stats := loadServerStats()
 	db, _ := loadPasswords()
 	mongoOk := false
-	nodesCount := 1
-	nodesOnline := 1
+	nodesCount := 0
+	nodesOnline := 0
 	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
 		mongoOk = true
 		if nodes, err := m.ListNodes(r.Context()); err == nil {
-			nodesCount = len(nodes)
 			online := 0
 			for _, n := range nodes {
+				if n.IsLocal && !localNodeEnabled() {
+					continue
+				}
+				nodesCount++
 				if n.Status == "online" {
 					online++
 				}
@@ -105,20 +108,20 @@ func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonOK(w, map[string]interface{}{
-		"wdtt_active":        serviceActive(wdttServiceUnit),
-		"xray_active":        serviceActive(xrayServiceUnit),
-		"mongo_active":       mongoOk,
-		"nodes_count":        nodesCount,
-		"nodes_online":       nodesOnline,
-		"wdtt_iface":         getWdttIface(),
-		"xray_version":       xrayVersion(),
-		"xray_binary":        xrayBinary(),
-		"stats":              stats,
-		"users_count":        len(db.Passwords),
-		"devices_count":      len(db.Devices),
-		"server_ip":          a.serverIP(),
-		"default_link_host":  a.defaultLinkHost(),
-		"panel_tls":          panelTLSEnabled(a.cfg),
+		"wdtt_active":       localNodeEnabled() && serviceActive(wdttServiceUnit),
+		"xray_active":       serviceActive(xrayServiceUnit),
+		"mongo_active":      mongoOk,
+		"nodes_count":       nodesCount,
+		"nodes_online":      nodesOnline,
+		"wdtt_iface":        getWdttIface(),
+		"xray_version":      xrayVersion(),
+		"xray_binary":       xrayBinary(),
+		"stats":             stats,
+		"users_count":       len(db.Passwords),
+		"devices_count":     len(db.Devices),
+		"server_ip":         a.serverIP(),
+		"default_link_host": a.defaultLinkHost(),
+		"panel_tls":         panelTLSEnabled(a.cfg),
 	})
 }
 
@@ -166,37 +169,37 @@ func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
 		dtlsPort, wgPort, clientPort := resolveUserPorts(entry, inbound)
 		normalizeEntryDevices(entry)
 		u := map[string]interface{}{
-			"password":           maskPassword(pass),
-			"password_key":       pass,
-			"device_id":          deviceIDsDisplay(entry),
-			"device_ids":         entry.DeviceIDs,
-			"devices_bound":      len(entry.DeviceIDs),
-			"max_devices":        entryMaxDevices(db, pass, entry),
-			"comment":            entry.Comment,
-			"expires_at":         entry.ExpiresAt,
-			"expires":            passwordExpiry(entry),
-			"up":                 formatBytes(entry.UpBytes),
-			"down":               formatBytes(entry.DownBytes),
-			"up_bytes":           entry.UpBytes,
-			"down_bytes":         entry.DownBytes,
-			"total_bytes":        entry.TotalBytes,
-			"total_gb":           bytesToGB(entry.TotalBytes),
-			"max_down_mbps":      entry.MaxDownMBps,
-			"max_up_mbps":        entry.MaxUpMBps,
-			"traffic_used":       used,
-			"traffic_used_fmt":   formatBytes(used),
-			"traffic_exceeded":   trafficExceeded(entry),
-			"is_expired":         isPasswordExpired(entry),
-			"is_deactivated":     entry.IsDeactivated,
-			"active":             !entry.IsDeactivated && !isPasswordExpired(entry) && !trafficExceeded(entry),
-			"online":             userOnlineFromStats(pass, deviceIDsDisplay(entry), false, stats),
-			"last_seen_at":       entry.LastSeenAt,
-			"ports":              entry.Ports,
-			"dtls_port":          dtlsPort,
-			"wg_port":            wgPort,
-			"client_port":        clientPort,
-			"link":               buildWdttLink(linkHost, pass, a.cfg.SubTitle, entry.VkHash, entry, inbound, a.buildSubURL(entry.SubID)),
-			"vk_hash":            entry.VkHash,
+			"password":         maskPassword(pass),
+			"password_key":     pass,
+			"device_id":        deviceIDsDisplay(entry),
+			"device_ids":       entry.DeviceIDs,
+			"devices_bound":    len(entry.DeviceIDs),
+			"max_devices":      entryMaxDevices(db, pass, entry),
+			"comment":          entry.Comment,
+			"expires_at":       entry.ExpiresAt,
+			"expires":          passwordExpiry(entry),
+			"up":               formatBytes(entry.UpBytes),
+			"down":             formatBytes(entry.DownBytes),
+			"up_bytes":         entry.UpBytes,
+			"down_bytes":       entry.DownBytes,
+			"total_bytes":      entry.TotalBytes,
+			"total_gb":         bytesToGB(entry.TotalBytes),
+			"max_down_mbps":    entry.MaxDownMBps,
+			"max_up_mbps":      entry.MaxUpMBps,
+			"traffic_used":     used,
+			"traffic_used_fmt": formatBytes(used),
+			"traffic_exceeded": trafficExceeded(entry),
+			"is_expired":       isPasswordExpired(entry),
+			"is_deactivated":   entry.IsDeactivated,
+			"active":           !entry.IsDeactivated && !isPasswordExpired(entry) && !trafficExceeded(entry),
+			"online":           userOnlineFromStats(pass, deviceIDsDisplay(entry), false, stats),
+			"last_seen_at":     entry.LastSeenAt,
+			"ports":            entry.Ports,
+			"dtls_port":        dtlsPort,
+			"wg_port":          wgPort,
+			"client_port":      clientPort,
+			"link":             buildWdttLink(linkHost, pass, a.cfg.SubTitle, entry.VkHash, entry, inbound, a.buildSubURL(entry.SubID)),
+			"vk_hash":          entry.VkHash,
 		}
 		a.enrichUserSub(u, entry)
 		users = append(users, u)
@@ -206,18 +209,25 @@ func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
 	for id, dev := range db.Devices {
 		devices = append(devices, map[string]interface{}{
 			"device_id": id,
-			"ip": dev.IP,
+			"ip":        dev.IP,
 		})
 	}
 	var clusterNodes []*paneldb.Node
 	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
 		clusterNodes, _ = m.ListNodes(r.Context())
+		filtered := clusterNodes[:0]
+		for _, node := range clusterNodes {
+			if node.IsActive && (!node.IsLocal || localNodeEnabled()) {
+				filtered = append(filtered, node)
+			}
+		}
+		clusterNodes = filtered
 	}
 	jsonOK(w, map[string]interface{}{
-		"users":         users,
-		"devices":       devices,
-		"nodes":         clusterNodes,
-		"api_key":       a.cfg.ApiKey,
+		"users":   users,
+		"devices": devices,
+		"nodes":   clusterNodes,
+		"api_key": a.cfg.ApiKey,
 		"inbound": map[string]interface{}{
 			"tag":               inbound.Tag,
 			"sub_title":         a.cfg.SubTitle,
@@ -236,23 +246,23 @@ func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
 }
 
 type userAPIReq struct {
-	Password    string    `json:"password"`
-	DeviceID    string    `json:"device_id"`
-	DeviceIDs   *[]string `json:"device_ids"`
-	MaxDevices  int       `json:"max_devices"`
-	Comment     string  `json:"comment"`
-	ExpiresAt   int64   `json:"expires_at"`
-	TotalGB     float64 `json:"total_gb"`
-	MaxDownMBps float64 `json:"max_down_mbps"`
-	MaxUpMBps   float64 `json:"max_up_mbps"`
-	Active      *bool   `json:"active"`
-	Ports       string  `json:"ports"`
-	DtlsPort    int     `json:"dtls_port"`
-	WgPort      int     `json:"wg_port"`
-	ClientPort  int     `json:"client_port"`
-	UseCustomPorts bool `json:"use_custom_ports"`
-	VkHash      string  `json:"vk_hash"`
-	Count       int     `json:"count"`
+	Password       string    `json:"password"`
+	DeviceID       string    `json:"device_id"`
+	DeviceIDs      *[]string `json:"device_ids"`
+	MaxDevices     int       `json:"max_devices"`
+	Comment        string    `json:"comment"`
+	ExpiresAt      int64     `json:"expires_at"`
+	TotalGB        float64   `json:"total_gb"`
+	MaxDownMBps    float64   `json:"max_down_mbps"`
+	MaxUpMBps      float64   `json:"max_up_mbps"`
+	Active         *bool     `json:"active"`
+	Ports          string    `json:"ports"`
+	DtlsPort       int       `json:"dtls_port"`
+	WgPort         int       `json:"wg_port"`
+	ClientPort     int       `json:"client_port"`
+	UseCustomPorts bool      `json:"use_custom_ports"`
+	VkHash         string    `json:"vk_hash"`
+	Count          int       `json:"count"`
 }
 
 func passwordEntryFromReq(req userAPIReq) *PasswordEntry {
@@ -339,7 +349,9 @@ func (a *App) handleUserUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleUserResetTraffic(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Password string `json:"password"` }
+	var req struct {
+		Password string `json:"password"`
+	}
 	if err := readJSON(r, &req); err != nil {
 		jsonError(w, err.Error(), 400)
 		return
@@ -356,7 +368,9 @@ func (a *App) handleUserResetTraffic(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleUserDelete(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Password string `json:"password"` }
+	var req struct {
+		Password string `json:"password"`
+	}
 	if err := readJSON(r, &req); err != nil {
 		jsonError(w, err.Error(), 400)
 		return
@@ -373,7 +387,9 @@ func (a *App) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleMainPassword(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Password string `json:"password"` }
+	var req struct {
+		Password string `json:"password"`
+	}
 	if err := readJSON(r, &req); err != nil {
 		jsonError(w, err.Error(), 400)
 		return
@@ -447,23 +463,36 @@ func (a *App) handlePanelPassword(w http.ResponseWriter, r *http.Request) {
 		NewPassword string `json:"new_password"`
 		NewUsername string `json:"new_username"`
 	}
-	readJSON(r, &req)
+	if err := readJSON(r, &req); err != nil {
+		jsonError(w, err.Error(), 400)
+		return
+	}
 	if bcrypt.CompareHashAndPassword([]byte(a.cfg.PasswordHash), []byte(req.OldPassword)) != nil {
 		jsonError(w, "неверный текущий пароль", 401)
 		return
 	}
+	next := *a.cfg
 	if req.NewPassword != "" {
+		if len([]byte(req.NewPassword)) > 72 {
+			jsonError(w, "Пароль не должен превышать 72 байта", 400)
+			return
+		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 		if err != nil {
 			jsonError(w, err.Error(), 500)
 			return
 		}
-		a.cfg.PasswordHash = string(hash)
+		next.PasswordHash = string(hash)
+		next.SessionKey = randomHex(32)
 	}
 	if req.NewUsername != "" {
-		a.cfg.Username = req.NewUsername
+		next.Username = strings.TrimSpace(req.NewUsername)
 	}
-	savePanelConfig(a.cfg)
+	if err := saveAdminConfig(&next); err != nil {
+		jsonError(w, err.Error(), 500)
+		return
+	}
+	*a.cfg = next
 	jsonOK(w, nil)
 }
 

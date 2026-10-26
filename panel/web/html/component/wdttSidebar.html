@@ -3,6 +3,8 @@
     <div class="ant-sidebar">
         <a-layout-sider :theme="themeSwitcher.currentTheme" collapsible :collapsed="collapsed"
             @collapse="(isCollapsed, type) => collapseHandle(isCollapsed, type)" breakpoint="md">
+            <div class="wdtt-side-brand"><span class="wdtt-side-mark">W</span><span v-if="!collapsed"><strong>WDTT</strong><small>CONTROL PANEL</small></span></div>
+            <div class="wdtt-side-label" v-if="!collapsed">ПЛАТФОРМА</div>
             <a-theme-switch></a-theme-switch>
             <a-menu :theme="themeSwitcher.currentTheme" mode="inline" :selected-keys="activeTab"
                 @click="({key}) => openLink(key)">
@@ -14,6 +16,7 @@
         </a-layout-sider>
         <a-drawer placement="left" :closable="false" @close="closeDrawer" :visible="visible"
             :wrap-class-name="themeSwitcher.currentTheme" :wrap-style="{ padding: 0 }" :style="{ height: '100%' }">
+            <div class="wdtt-side-brand"><span class="wdtt-side-mark">W</span><span><strong>WDTT</strong><small>CONTROL PANEL</small></span></div>
             <div class="drawer-handle" @click="toggleDrawer" slot="handle">
                 <a-icon :type="visible ? 'close' : 'menu-fold'"></a-icon>
             </div>

@@ -78,6 +78,10 @@
               </a-select-option>
             </a-select>
           </div>
+          <div class="user-conn-block" style="margin-bottom:12px;">
+            <div class="user-conn-label">Ремарка для VK Turn Proxy (после #)</div>
+            <a-input v-model.trim="iosServerRemark" :placeholder="selectedNodeName" maxlength="80"></a-input>
+          </div>
           <div class="user-conn-block">
             <div class="user-conn-label">Ссылка</div>
             <code class="user-conn-code user-conn-code--copy" title="Нажмите чтобы скопировать"
@@ -157,6 +161,7 @@
       userModalApp.resetForm();
     },
     showEdit(row, serverIp, inbound) {
+	  userModalApp.iosServerRemark = '';
       this.isEdit = !row.is_main;
       this.isMain = !!row.is_main;
       this.activeTab = 'main';
@@ -169,6 +174,8 @@
     showLink(row, serverIp, inbound, nodes) {
       this.showEdit(row, serverIp, inbound);
       this.activeTab = 'conn';
+      userModalApp.nodesList = [];
+      userModalApp.selectedNodeId = '';
       if (nodes && nodes.length) {
         userModalApp.nodesList = nodes;
         userModalApp.selectedNodeId = nodes[0].id;
@@ -196,6 +203,7 @@
       subQrInstance: null,
       nodesList: [],
       selectedNodeId: 'local',
+      iosServerRemark: '',
       userForm: {
         password: '',
         device_ids: [],
@@ -206,6 +214,10 @@
       },
     },
     computed: {
+      selectedNodeName() {
+        const node = (this.nodesList || []).find(n => n.id === this.selectedNodeId);
+        return node ? node.name : (this.modalInbound.remark || 'WDTT');
+      },
       modalInbound() {
         return this.userModal.inbound || { dtls_port: 56000, raw_direct_port: 56003, client_port: 9000, dns: '1.1.1.1' };
       },
@@ -299,8 +311,8 @@
             key: 'ios',
             title: 'iOS — VK Turn Proxy',
             repo: 'https://github.com/anton48/vk-turn-proxy-ios',
-            hint: 'wdtt:// colon, только 1-й хеш (клиент не поддерживает несколько)',
-            value: wdttBuildColonLink({ ...o, localPort: 0, withName: false, hashLimit: 1 }),
+            hint: 'wdtt:// colon, 1-й хеш и #ремарка сервера',
+            value: wdttBuildColonLink({ ...o, name: this.iosServerRemark || this.selectedNodeName, localPort: 0, withName: true, hashLimit: 1 }),
           },
           {
             key: 'android',
@@ -490,6 +502,7 @@
           || (f.vk_hash || '').trim() !== (s.vk_hash || '').trim();
       },
       resetForm() {
+		this.iosServerRemark = '';
         const inbound = this.modalInbound;
         this.apiLink = '';
         this.linkSnapshot = null;

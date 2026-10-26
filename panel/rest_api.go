@@ -562,7 +562,7 @@ func (a *App) buildSingleRestUserWithNodes(db *PasswordsDB, pass string, inbound
 
 	nodeLinks := make([]RestNodeLink, 0, len(nodes))
 	for _, n := range nodes {
-		if !n.IsActive {
+		if !n.IsActive || (n.IsLocal && !localNodeEnabled()) {
 			continue
 		}
 		h := n.Host
@@ -570,13 +570,16 @@ func (a *App) buildSingleRestUserWithNodes(db *PasswordsDB, pass string, inbound
 			h = linkHost
 		}
 		nodeInbound := inbound
+		nodeInbound.ServerHost = h
 		nodeInbound.DtlsPort = n.DtlsPort
 		nodeInbound.RawDirectPort = n.RawPort
+		nodeEntry := *entry
+		nodeEntry.Ports = ""
 		title := n.Name
 		if title == "" {
 			title = a.cfg.SubTitle
 		}
-		nl, _ := buildWdttShareLink(h, pass, email, title, "", entry.VkHash, entry, nodeInbound, subURL)
+		nl, _ := buildWdttShareLink(h, pass, email, title, "", entry.VkHash, &nodeEntry, nodeInbound, subURL)
 		nodeLinks = append(nodeLinks, RestNodeLink{
 			NodeID:   n.ID,
 			NodeName: n.Name,
@@ -642,6 +645,15 @@ func (a *App) handleRestNodesRoot(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				restError(w, http.StatusInternalServerError, err.Error())
 				return
+			}
+			if !localNodeEnabled() {
+				filtered := nodes[:0]
+				for _, n := range nodes {
+					if !n.IsLocal {
+						filtered = append(filtered, n)
+					}
+				}
+				nodes = filtered
 			}
 			restJSON(w, http.StatusOK, map[string]interface{}{
 				"success": true,

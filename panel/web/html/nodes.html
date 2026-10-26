@@ -169,14 +169,21 @@
   <!-- Модалка быстрой команды подключения VPS -->
   <a-modal v-model="cmdModal.visible" title="Подключение VPS-ноды" :footer="null" width="650px">
     <a-steps size="small" :current="nodeStage" style="margin-bottom:18px"><a-step title="Создана"></a-step><a-step title="Установщик"></a-step><a-step title="Онлайн"></a-step></a-steps>
-    <p>Запустите на VPS под <code>root</code>. Команда содержит ключ этой ноды и проверяет сертификат панели. Вводить ключ вручную не нужно.</p>
+    <p>Запустите на VPS под <code>root</code>. Скрипт скачивается с GitHub, затем спросит секрет ноды в SSH-терминале. Секрет не попадает в команду или историю shell.</p>
+    <a-input v-model="cmdModal.panelUrl" addon-before="HTTPS-адрес панели" placeholder="https://panel.example/wdtt/" style="margin-bottom:10px"></a-input>
+    <a-input v-model="cmdModal.pin" addon-before="SPKI pin (если нужен)" placeholder="sha256//..." style="margin-bottom:10px"></a-input>
     <div class="node-quick-cmd">[[ cmdModal.cmd ]]</div>
-    <a v-if="cmdModal.url" :href="cmdModal.url" download="wdtt-node-install.sh" rel="noreferrer" class="user-conn-open-link">Скачать персональный установщик</a>
+    <a v-if="cmdModal.url" :href="cmdModal.url" target="_blank" rel="noopener noreferrer" class="user-conn-open-link">Исходный установщик на GitHub</a>
+    <div style="display:flex;gap:8px;align-items:center;margin:12px 0">
+      <a-input :value="cmdModal.secret" type="password" readonly aria-label="Секрет ноды"></a-input>
+      <a-button icon="copy" @click="copySecret">Копировать секрет</a-button>
+    </div>
+    <p class="text-muted">Если VPS не достигает панели напрямую, укажите доступный с VPS HTTPS-адрес или настройте <code>HTTPS_PROXY</code> на VPS до запуска. При другом TLS-сертификате очистите или замените SPKI pin. Для работы ноды доступ к API панели нужен постоянно.</p>
     <a-alert v-if="currentInstallNode && currentInstallNode.status === 'online'" type="success" show-icon message="Нода подключена и отвечает панели" style="margin-bottom:12px"></a-alert>
     <a-alert v-else type="info" show-icon message="После запуска дождитесь статуса «Онлайн». Если ответа нет, проверьте sudo wdtt-node logs, TUN и облачный firewall для UDP-портов." style="margin-bottom:12px"></a-alert>
     <p v-if="currentInstallNode && currentInstallNode.cert_sha256" class="text-muted" style="font-size:11px;word-break:break-all">Сертификат DTLS SHA-256: [[ currentInstallNode.cert_sha256 ]]</p>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
-      <span class="text-muted">Команда содержит секрет ноды. Храните её как пароль.</span>
+      <span class="text-muted">После запуска вставьте секрет в запрос установщика.</span>
       <a-button type="primary" icon="copy" @click="copyCmd">Скопировать команду</a-button>
     </div>
   </a-modal>
@@ -225,6 +232,9 @@ new Vue({
         cmd: '',
         nodeId: '',
         url: '',
+        secret: '',
+        panelUrl: '',
+        pin: '',
       },
       nodePoll: null,
     };
@@ -248,6 +258,8 @@ new Vue({
     },
   },
   watch: {
+    'cmdModal.panelUrl'() { this.updateInstallCmd(); },
+    'cmdModal.pin'() { this.updateInstallCmd(); },
     'cmdModal.visible'(visible) {
       if (this.nodePoll) clearInterval(this.nodePoll);
       this.nodePoll = visible ? setInterval(() => this.fetchNodes(true), 10000) : null;
@@ -357,17 +369,37 @@ new Vue({
         this.$message.error('Для подключения ноды откройте панель по HTTPS и настройте сертификат панели.');
         return;
       }
-      const loc = window.location;
-      const url = loc.origin + basePath + 'panel/api/node/install?id=' + encodeURIComponent(row.id);
-      const tls = this.certPin ? '-k --pinnedpubkey "' + this.certPin + '" ' : '';
-      this.cmdModal.cmd = "bash -o pipefail -c 'command -v curl >/dev/null || { apt-get update -y && apt-get install -y curl ca-certificates; }; curl -fsSL " + tls + '-H "Authorization: Bearer ' + row.api_key + '" "' + url + '" | bash' + "'";
-      this.cmdModal.url = url + '&token=' + encodeURIComponent(row.api_key);
+      this.cmdModal.panelUrl = window.location.origin + basePath;
+      this.cmdModal.pin = this.certPin || '';
+      this.cmdModal.url = 'https://raw.githubusercontent.com/pythoneer-dev-q/NotAWDTT-panel/main/node-install.sh';
+      this.cmdModal.secret = row.api_key;
+      this.updateInstallCmd();
       this.cmdModal.nodeId = row.id;
       this.cmdModal.visible = true;
     },
+    updateInstallCmd() {
+      const panelUrl = (this.cmdModal.panelUrl || '').trim();
+      if (!/^https:\/\/[A-Za-z0-9.:[\]-]+(?:\/[A-Za-z0-9/_-]*)?\/?$/.test(panelUrl)) {
+        this.cmdModal.cmd = 'Укажите корректный HTTPS-адрес панели без параметров и символов shell.';
+        return;
+      }
+      const pinValue = (this.cmdModal.pin || '').trim();
+      if (pinValue && !/^sha256\/\/[A-Za-z0-9+/]{43}=$/.test(pinValue)) {
+        this.cmdModal.cmd = 'Неверный SPKI pin: ожидается sha256// и 44 символа base64.';
+        return;
+      }
+      const pin = pinValue ? ' --pin "' + pinValue + '"' : '';
+      this.cmdModal.cmd = "bash -o pipefail -c 'command -v curl >/dev/null || { apt-get update -y && apt-get install -y curl ca-certificates; }; curl -fsSL --proto \"=https\" " + this.cmdModal.url + ' | bash -s -- --panel "' + panelUrl + '"' + pin + "'";
+    },
     copyCmd() {
-      navigator.clipboard.writeText(this.cmdModal.cmd).then(() => {
-        this.$message.success('Команда скопирована в буфер обмена!');
+      if (!this.cmdModal.cmd.startsWith('bash ')) return;
+      ClipboardManager.copyText(this.cmdModal.cmd).then(ok => {
+        this.$message[ok ? 'success' : 'error'](ok ? 'Команда скопирована' : 'Не удалось скопировать команду');
+      });
+    },
+    copySecret() {
+      ClipboardManager.copyText(this.cmdModal.secret).then(ok => {
+        this.$message[ok ? 'success' : 'error'](ok ? 'Секрет скопирован' : 'Не удалось скопировать секрет');
       });
     },
     formatBytes(bytes) {

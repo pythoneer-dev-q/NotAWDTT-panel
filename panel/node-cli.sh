@@ -5,6 +5,7 @@ conf=/etc/wdtt-node/node.conf
 if [ "$(id -u)" -ne 0 ]; then echo 'Запустите sudo wdtt-node' >&2; exit 1; fi
 if [ ! -f "$conf" ]; then echo "Конфигурация ноды не найдена: $conf" >&2; exit 1; fi
 . "$conf"
+if [ -n "${HTTPS_PROXY:-}" ]; then export HTTPS_PROXY; fi
 
 case "${1:-}" in
     status)
@@ -15,12 +16,21 @@ case "${1:-}" in
     logs|log) journalctl -u wdtt-node.service -f -n 50 ;;
     restart) systemctl restart wdtt-node.service ;;
     reinstall|update)
-        curl_opts=(--fail --show-error --silent --location --retry 3)
+        curl_opts=(--fail --show-error --silent --proto '=https' --max-redirs 0 --retry 2 --connect-timeout 10 --max-time 90)
         if [ -n "${NODE_CERT_PIN:-}" ]; then curl_opts+=(--insecure --pinnedpubkey "$NODE_CERT_PIN"); fi
         tmp=$(mktemp)
         trap 'rm -f -- "$tmp"' EXIT
-        curl "${curl_opts[@]}" -H "Authorization: Bearer $NODE_TOKEN" "$MASTER_URL/node/install?id=$NODE_ID" -o "$tmp"
-        bash "$tmp"
+        if curl --fail --show-error --silent --proto '=https' --max-redirs 0 --retry 2 --connect-timeout 10 --max-time 60 \
+            https://raw.githubusercontent.com/pythoneer-dev-q/NotAWDTT-panel/main/node-install.sh -o "$tmp" \
+            && [ -s "$tmp" ] && [ "$(head -c 19 "$tmp")" = '#!/usr/bin/env bash' ]; then
+            args=(--panel "${MASTER_URL%/panel/api}")
+            if [ -n "${NODE_CERT_PIN:-}" ]; then args+=(--pin "$NODE_CERT_PIN"); fi
+            WDTT_NODE_SECRET="$NODE_TOKEN" bash "$tmp" "${args[@]}"
+        else
+            echo 'GitHub недоступен с VPS. Загружаю установщик напрямую с панели.' >&2
+            curl "${curl_opts[@]}" -H "Authorization: Bearer $NODE_TOKEN" "$MASTER_URL/node/install?id=$NODE_ID" -o "$tmp"
+            bash "$tmp"
+        fi
         ;;
     uninstall)
         read -rp 'Введите УДАЛИТЬ для удаления службы и бинарника ноды: ' answer

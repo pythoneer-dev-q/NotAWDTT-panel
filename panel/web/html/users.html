@@ -55,7 +55,7 @@
                   </div>
                   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
                     <a-radio-group v-model="statusFilter" button-style="solid" size="small">
-                      <a-radio-button value="all">Все ([[ users.length ]])</a-radio-button>
+                      <a-radio-button value="all">Все ([[ userCounts.all ]])</a-radio-button>
                       <a-radio-button value="active">Активные ([[ activeCount ]])</a-radio-button>
                       <a-radio-button value="blocked">Блок ([[ blockedCount ]])</a-radio-button>
                       
@@ -179,6 +179,10 @@
                     </a-tooltip>
                   </span>
                 </a-table>
+                <div v-if="nextUsersOffset < usersTotal" style="display:flex;justify-content:center;align-items:center;gap:12px;margin-top:16px">
+                  <span class="text-muted">Показано [[ users.length ]] из [[ usersTotal ]]</span>
+                  <a-button icon="down" :loading="loadingMore" @click="loadMoreUsers">Загрузить ещё 100</a-button>
+                </div>
               </a-card>
             </a-col>
           </a-row>
@@ -316,6 +320,12 @@ curl -X DELETE -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD"
       loadingStates: { fetched: false, spinning: false },
       showAlert: false,
       users: [],
+      usersTotal: 0,
+      nextUsersOffset: 0,
+      userCounts: { all: 0, active: 0, blocked: 0 },
+      loadingMore: false,
+      usersRequestId: 0,
+      searchTimer: null,
       nodes: [],
       serverIp: '',
       inbound: { dtls_port: 56000, raw_direct_port: 56003, client_port: 9000 },
@@ -341,10 +351,10 @@ curl -X DELETE -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD"
     },
     computed: {
       activeCount() {
-        return this.users.filter(u => u.active && !u.is_expired && !u.traffic_exceeded).length;
+        return this.userCounts.active;
       },
       blockedCount() {
-        return this.users.filter(u => u.is_deactivated).length;
+        return this.userCounts.blocked;
       },
       expiredCount() {
         return this.users.filter(u => u.is_expired).length;
@@ -353,25 +363,20 @@ curl -X DELETE -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD"
         return window.location.origin;
       },
       filteredUsers() {
-        const q = (this.searchQuery || '').trim().toLowerCase();
-        const sf = this.statusFilter;
-        return this.users.filter(u => {
-          if (q) {
-            const pass = String(u.password || '').toLowerCase();
-            const passKey = String(u.password_key || '').toLowerCase();
-            const comment = String(u.comment || '').toLowerCase();
-            const vk = String(u.vk_hash || '').toLowerCase();
-            const dev = String(u.device_id || '').toLowerCase();
-            if (!pass.includes(q) && !passKey.includes(q) && !comment.includes(q) && !vk.includes(q) && !dev.includes(q)) {
-              return false;
-            }
-          }
-          if (sf === 'active') return u.active && !u.is_expired && !u.traffic_exceeded;
-          if (sf === 'blocked') return u.is_deactivated;
-          if (sf === 'expired') return u.is_expired;
-          return true;
-        });
+        return this.users;
       },
+    },
+    watch: {
+      searchQuery() {
+        clearTimeout(this.searchTimer);
+        this.searchTimer = setTimeout(() => this.loadUsers({ withSpinner: true }), 300);
+      },
+      statusFilter() {
+        this.loadUsers({ withSpinner: true });
+      },
+    },
+    beforeDestroy() {
+      clearTimeout(this.searchTimer);
     },
     async mounted() {
       if (window.location.protocol !== "https:") {
@@ -468,18 +473,25 @@ curl -X DELETE -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD"
       },
       async loadUsers(options = {}) {
         const withSpinner = options.withSpinner === true;
+        const requestId = ++this.usersRequestId;
         this.refreshing = true;
         if (withSpinner) {
           this.loadingStates.spinning = true;
         }
-        const msg = await axios.get('panel/api/users').then(r => r.data).catch(() => null);
+        const params = { limit: 100, offset: 0, q: (this.searchQuery || '').trim(), status: this.statusFilter };
+        const msg = await axios.get('panel/api/users', { params }).then(r => r.data).catch(() => null);
+        if (requestId !== this.usersRequestId) return;
         if (!msg || !msg.success) {
           this.refreshing = false;
           if (withSpinner) this.loadingStates.spinning = false;
           if (!this.loadingStates.fetched) this.loadingStates.fetched = true;
+          if (withSpinner) this.$message.error((msg && msg.msg) || 'Не удалось загрузить пользователей');
           return;
         }
         this.users = msg.obj.users || [];
+        this.usersTotal = Number(msg.obj.total) || 0;
+        this.nextUsersOffset = this.users.length;
+        this.userCounts = msg.obj.counts || { all: 0, active: 0, blocked: 0 };
         this.nodes = msg.obj.nodes || [];
         if (msg.obj.api_key) {
           this.apiKey = msg.obj.api_key;
@@ -494,6 +506,29 @@ curl -X DELETE -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD"
           this.refreshing = false;
           if (withSpinner) this.loadingStates.spinning = false;
         }, 500);
+      },
+      async loadMoreUsers() {
+        if (this.loadingMore || this.nextUsersOffset >= this.usersTotal) return;
+        const requestId = this.usersRequestId;
+        const offset = this.nextUsersOffset;
+        this.loadingMore = true;
+        try {
+          const params = { limit: 100, offset, q: (this.searchQuery || '').trim(), status: this.statusFilter };
+          const msg = await axios.get('panel/api/users', { params }).then(r => r.data);
+          if (requestId !== this.usersRequestId) return;
+          if (!msg.success || !msg.obj) throw new Error(msg.msg || 'Ошибка загрузки');
+          const existing = new Set(this.users.map(this.rowKey));
+          const received = msg.obj.users || [];
+          const next = received.filter(row => !existing.has(this.rowKey(row)));
+          this.users = this.users.concat(next);
+          this.nextUsersOffset = offset + received.length;
+          this.usersTotal = Number(msg.obj.total) || 0;
+          this.userCounts = msg.obj.counts || this.userCounts;
+        } catch (err) {
+          this.$message.error('Не удалось загрузить следующую порцию пользователей: ' + err);
+        } finally {
+          this.loadingMore = false;
+        }
       },
       async toggleUserBlock(row) {
         const pass = row.password_key || row.password;

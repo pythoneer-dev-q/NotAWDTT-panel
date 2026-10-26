@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -145,6 +146,15 @@ func (a *App) enrichUserSub(u map[string]interface{}, entry *PasswordEntry) {
 	u["sub_url"] = a.buildSubURL(entry.SubID)
 }
 
+func userRowMatchesQuery(row map[string]interface{}, query string) bool {
+	for _, field := range []string{"password", "password_key", "comment", "vk_hash", "device_id"} {
+		if strings.Contains(strings.ToLower(fmt.Sprint(row[field])), query) {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
 	// Подтянуть live vk_calls / снять finishing; ручные хеши не затираем (#23).
 	reconcileUserSessionFields()
@@ -160,14 +170,114 @@ func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
 	if mainEntry, ok := db.Passwords[db.MainPassword]; ok && mainEntry != nil {
 		mainSub = a.buildSubURL(mainEntry.SubID)
 	}
-	users := []map[string]interface{}{mainUserRow(db, stats, inbound, linkHost, a.cfg.SubTitle, mainSub)}
+	mainRow := mainUserRow(db, stats, inbound, linkHost, a.cfg.SubTitle, mainSub)
 	if mainEntry, ok := db.Passwords[db.MainPassword]; ok {
-		a.enrichUserSub(users[0], mainEntry)
+		a.enrichUserSub(mainRow, mainEntry)
 	}
+	counts := map[string]int{"all": 1, "active": 0, "blocked": 0}
+	if mainRow["active"] == true {
+		counts["active"]++
+	}
+	if mainRow["is_deactivated"] == true {
+		counts["blocked"]++
+	}
+	keys := make([]string, 0, len(db.Passwords))
 	for pass, entry := range db.Passwords {
 		if pass == db.MainPassword {
 			continue
 		}
+		if entry == nil {
+			continue
+		}
+		keys = append(keys, pass)
+		counts["all"]++
+		if entry.IsDeactivated {
+			counts["blocked"]++
+		}
+		if !entry.IsDeactivated && !isPasswordExpired(entry) && !trafficExceeded(entry) {
+			counts["active"]++
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		ci := strings.ToLower(strings.TrimSpace(db.Passwords[keys[i]].Comment))
+		cj := strings.ToLower(strings.TrimSpace(db.Passwords[keys[j]].Comment))
+		if ci != cj {
+			return ci < cj
+		}
+		mi, mj := maskPassword(keys[i]), maskPassword(keys[j])
+		if mi != mj {
+			return mi < mj
+		}
+		return keys[i] < keys[j]
+	})
+	selected := make([]string, 0, len(keys)+1)
+	selected = append(selected, db.MainPassword)
+	selected = append(selected, keys...)
+	totalUsers := len(selected)
+	if _, paged := r.URL.Query()["limit"]; paged {
+		limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+		if err != nil || limit < 1 || limit > 200 {
+			jsonError(w, "limit must be between 1 and 200", http.StatusBadRequest)
+			return
+		}
+		offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
+		if err != nil || offset < 0 {
+			jsonError(w, "offset must be non-negative", http.StatusBadRequest)
+			return
+		}
+		query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+		status := r.URL.Query().Get("status")
+		if status != "" && status != "all" && status != "active" && status != "blocked" {
+			jsonError(w, "invalid status", http.StatusBadRequest)
+			return
+		}
+		filtered := make([]string, 0, len(selected))
+		for _, pass := range selected {
+			if pass == db.MainPassword {
+				if (status == "active" && mainRow["active"] != true) || (status == "blocked" && mainRow["is_deactivated"] != true) {
+					continue
+				}
+				if query != "" && !userRowMatchesQuery(mainRow, query) {
+					continue
+				}
+			} else {
+				entry := db.Passwords[pass]
+				if (status == "active" && (entry.IsDeactivated || isPasswordExpired(entry) || trafficExceeded(entry))) || (status == "blocked" && !entry.IsDeactivated) {
+					continue
+				}
+				if query != "" {
+					normalizeEntryDevices(entry)
+					matched := false
+					for _, value := range []string{pass, maskPassword(pass), entry.Comment, entry.VkHash, deviceIDsDisplay(entry)} {
+						if strings.Contains(strings.ToLower(value), query) {
+							matched = true
+							break
+						}
+					}
+					if !matched {
+						continue
+					}
+				}
+			}
+			filtered = append(filtered, pass)
+		}
+		totalUsers = len(filtered)
+		if offset > totalUsers {
+			offset = totalUsers
+		}
+		end := offset + limit
+		if end > totalUsers {
+			end = totalUsers
+		}
+		selected = filtered[offset:end]
+	}
+	users := make([]map[string]interface{}, 0, len(selected))
+	for _, pass := range selected {
+		if pass == db.MainPassword {
+			users = append(users, mainRow)
+			continue
+		}
+		entry := db.Passwords[pass]
 		used := trafficUsed(entry)
 		dtlsPort, wgPort, clientPort := resolveUserPorts(entry, inbound)
 		normalizeEntryDevices(entry)
@@ -207,13 +317,14 @@ func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
 		a.enrichUserSub(u, entry)
 		users = append(users, u)
 	}
-	sortUsersList(users)
 	devices := []map[string]interface{}{}
-	for id, dev := range db.Devices {
-		devices = append(devices, map[string]interface{}{
-			"device_id": id,
-			"ip":        dev.IP,
-		})
+	if _, paged := r.URL.Query()["limit"]; !paged {
+		for id, dev := range db.Devices {
+			devices = append(devices, map[string]interface{}{
+				"device_id": id,
+				"ip":        dev.IP,
+			})
+		}
 	}
 	var clusterNodes []*paneldb.Node
 	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
@@ -228,6 +339,8 @@ func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonOK(w, map[string]interface{}{
 		"users":   users,
+		"total":   totalUsers,
+		"counts":  counts,
 		"devices": devices,
 		"nodes":   clusterNodes,
 		"api_key": a.cfg.ApiKey,

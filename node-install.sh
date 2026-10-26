@@ -65,12 +65,19 @@ umask 077
 installer=$(mktemp)
 trap 'rm -f -- "$installer"' EXIT
 panel_url="${panel_url%/}"
-curl_args=(--fail --show-error --silent --proto '=https' --tlsv1.2 --max-redirs 0 --connect-timeout 10 --max-time 60)
+curl_args=(--fail --show-error --silent --proto '=https' --tlsv1.2 --max-redirs 0 --connect-timeout 10 --max-time 90 --retry 2 --retry-delay 2)
 if [ -n "$cert_pin" ]; then
     curl_args+=(--insecure --pinnedpubkey "$cert_pin")
 fi
 echo 'Проверка секрета и загрузка персонального установщика с панели...'
-curl "${curl_args[@]}" -H "Authorization: Bearer $WDTT_NODE_SECRET" \
-    "$panel_url/panel/api/node/install" -o "$installer"
+if ! curl "${curl_args[@]}" -H "Authorization: Bearer $WDTT_NODE_SECRET" \
+    "$panel_url/panel/api/node/install" -o "$installer"; then
+    echo 'Не удалось получить установщик. Проверьте HTTPS-адрес панели и доступ VPS к нему (DNS, TCP/443, прокси/TSPU). HTTP 403 означает неверный секрет или отключённую ноду; ошибка 60 — сертификат, ошибка 90 — неверный pin.' >&2
+    exit 1
+fi
+if [ ! -s "$installer" ] || [ "$(head -c 19 "$installer")" != '#!/usr/bin/env bash' ]; then
+    echo 'Панель вернула пустой файл или файл другого формата.' >&2
+    exit 1
+fi
 unset WDTT_NODE_SECRET
-bash "$installer"
+WDTT_PANEL_PIN="$cert_pin" bash "$installer"

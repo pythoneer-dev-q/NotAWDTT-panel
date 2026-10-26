@@ -1,9 +1,23 @@
 {{ template "page/head_start" .}}
 <style>
+  .nodes-page .ant-layout-content { margin: 16px; }
+  .nodes-page .ant-card { border-radius: 12px; box-shadow: none; }
+  .nodes-page .ant-card-head { min-height: 42px; }
+  .nodes-page .ant-card-head-title { padding: 10px 0; }
+  .nodes-page .ant-card-body { padding: 14px; }
+  .nodes-page .ant-table-thead > tr > th,
+  .nodes-page .ant-table-tbody > tr > td { padding: 10px 12px; }
+  .nodes-page .node-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+  .nodes-page .node-actions .ant-btn { margin: 0; }
+  @media (max-width: 700px) {
+    .nodes-page .ant-layout-content { margin: 8px; }
+    .nodes-page .ant-table-content { overflow-x: auto; }
+    .nodes-page .ant-table-body table { min-width: 760px; }
+  }
   .node-stat-card {
     border-radius: 10px;
-    padding: 16px;
-    margin-bottom: 16px;
+    padding: 12px 14px;
+    margin-bottom: 0;
     background: #fafafa;
     border: 1px solid #e8e8e8;
     transition: all 0.3s;
@@ -18,7 +32,7 @@
     margin-bottom: 6px;
   }
   .node-stat-value {
-    font-size: 24px;
+    font-size: 20px;
     font-weight: 700;
   }
   .node-card-head {
@@ -34,7 +48,7 @@
   .node-quick-cmd {
     background: #111827;
     color: #10b981;
-    padding: 12px;
+    padding: 10px;
     border-radius: 6px;
     font-family: monospace;
     font-size: 13px;
@@ -110,9 +124,9 @@
 
                 <!-- Статус -->
                 <template slot="status" slot-scope="text, row">
-                  <a-tag :color="row.status === 'online' ? 'green' : 'red'">
+                  <a-tag :color="row.status === 'online' ? 'green' : (row.status === 'disabled' ? 'default' : 'red')">
                     <a-badge :status="row.status === 'online' ? 'processing' : 'error'" style="margin-right:4px;" />
-                    [[ row.status === 'online' ? 'Online' : 'Offline' ]]
+                    [[ row.status === 'online' ? 'Online' : (row.status === 'disabled' ? 'Выключена' : 'Offline') ]]
                   </a-tag>
                   <span v-if="row.latency" style="font-size:12px; margin-left:4px;" class="text-muted">
                     ([[ row.latency ]] ms)
@@ -138,14 +152,14 @@
 
                 <!-- Действия -->
                 <template slot="actions" slot-scope="_, row">
-                  <a-space>
-                    <a-button size="small" icon="wifi" @click="pingNode(row)" :loading="row.pinging">Ping</a-button>
-                    <a-button v-if="!row.is_local" size="small" icon="code" @click="showInstallCmd(row)">Команда</a-button>
+                  <div class="node-actions">
+                    <a-button size="small" icon="wifi" @click="pingNode(row)" :loading="row.pinging">DNS</a-button>
+                    <a-button v-if="!row.is_local" size="small" icon="code" @click="showInstallCmd(row)">Установить</a-button>
                     <a-button size="small" icon="edit" @click="openEditModal(row)">Изменить</a-button>
                     <a-popconfirm v-if="!row.is_local" title="Удалить эту ноду?" ok-text="Да" cancel-text="Отмена" @confirm="deleteNode(row.id)">
                       <a-button size="small" type="danger" icon="delete">Удалить</a-button>
                     </a-popconfirm>
-                  </a-space>
+                  </div>
                 </template>
               </a-table>
             </a-card>
@@ -185,10 +199,10 @@
 
   <!-- Модалка быстрой команды подключения VPS -->
   <a-modal v-model="cmdModal.visible" title="Подключение нового VPS сервера" :footer="null" width="650px">
-    <p>Выполните эту команду на новом VPS-сервере под <code>root</code> для автоматического подключения к панели:</p>
+    <p>Запустите на новом VPS под <code>root</code>. Команда уже привязана к этой ноде — вводить ключ вручную не нужно.</p>
     <div class="node-quick-cmd">[[ cmdModal.cmd ]]</div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
-      <span class="text-muted">Скрипт установит необходимые компоненты и запустит воркер ноды.</span>
+      <span class="text-muted">Команда содержит секрет ноды. Храните её как пароль.</span>
       <a-button type="primary" icon="copy" @click="copyCmd">Скопировать команду</a-button>
     </div>
   </a-modal>
@@ -320,12 +334,10 @@ new Vue({
       HttpUtil.post('/panel/api/nodes/ping', { host: row.host || this.serverIP, port: row.dtls_port }).then(res => {
         row.pinging = false;
         if (res.success && res.obj) {
-          row.latency = res.obj.latency_ms;
-          if (res.obj.reachable) {
-            this.$message.success('Нода ' + row.name + ' доступна (' + res.obj.latency_ms + ' ms)');
-            row.status = 'online';
+          if (res.obj.resolved) {
+            this.$message.success('Адрес ноды ' + row.name + ' разрешается');
           } else {
-            this.$message.warning('Пинг отправлен, ожидание ответа (' + (res.obj.error || 'таймаут') + ')');
+            this.$message.warning('Не удалось разрешить адрес: ' + (res.obj.error || 'неизвестная ошибка'));
           }
         }
       }).catch(() => {
@@ -335,8 +347,8 @@ new Vue({
     },
     showInstallCmd(row) {
       const loc = window.location;
-      const host = loc.host;
-      this.cmdModal.cmd = 'bash <(curl -fsSL "http://' + host + basePath + 'panel/api/node/install?token=' + (row.api_key || '') + '&id=' + row.id + '")';
+      const url = loc.origin + basePath + 'panel/api/node/install?token=' + encodeURIComponent(row.api_key || '') + '&id=' + encodeURIComponent(row.id);
+      this.cmdModal.cmd = 'bash <(curl -fsSL "' + url + '")';
       this.cmdModal.visible = true;
     },
     copyCmd() {

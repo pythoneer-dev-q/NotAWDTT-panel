@@ -1,9 +1,9 @@
 package panel
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/tls"
-	"context"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -64,9 +64,6 @@ func lookupUserBySubID(subID string) (*subUserInfo, error) {
 					continue
 				}
 				e := userEntryFromPaneldb(u)
-				if e.IsDeactivated || isPasswordExpired(e) || trafficExceeded(e) {
-					return nil, fmt.Errorf("subscription inactive")
-				}
 				email := strings.TrimSpace(e.Comment)
 				if email == "" {
 					email = pass
@@ -87,9 +84,6 @@ func lookupUserBySubID(subID string) (*subUserInfo, error) {
 			continue
 		}
 		e := userEntryFromPaneldb(u)
-		if e.IsDeactivated || isPasswordExpired(e) || trafficExceeded(e) {
-			return nil, fmt.Errorf("subscription inactive")
-		}
 		email := strings.TrimSpace(e.Comment)
 		if email == "" {
 			email = pass
@@ -289,6 +283,14 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "subscription not found", http.StatusNotFound)
 		return
 	}
+	if info.Entry.IsDeactivated || isPasswordExpired(info.Entry) || trafficExceeded(info.Entry) {
+		if subscriptionWantsHTML(r) {
+			a.serveSubInfoPage(w, r, subID, info, nil, nil)
+		} else {
+			http.Error(w, "subscription inactive", http.StatusForbidden)
+		}
+		return
+	}
 	inbound, _ := loadWdttInbound()
 	linkHost := a.resolveLinkHost(inbound)
 	subURL := a.buildSubURL(info.Entry.SubID)
@@ -428,6 +430,7 @@ func (a *App) serveSubInfoPage(w http.ResponseWriter, r *http.Request, subID str
 		"downloadByte": info.Entry.DownBytes,
 		"uploadByte":   info.Entry.UpBytes,
 		"totalByte":    total,
+		"deactivated":  info.Entry.IsDeactivated,
 		"datepicker":   "gregorian",
 		"result":       links,
 		"linkTitles":   linkTitles,

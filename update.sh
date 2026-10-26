@@ -20,6 +20,32 @@ export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Keep the selected verbosity across subsequent updates and restarts.
+SAVED_LOG_LEVEL=""
+if [ -f /etc/wdtt/.env ]; then
+    SAVED_LOG_LEVEL=$(sed -n 's/^WDTT_LOG_LEVEL=//p' /etc/wdtt/.env | tail -n 1)
+fi
+LOG_LEVEL="${WDTT_LOG_LEVEL:-${SAVED_LOG_LEVEL:-info}}"
+if [ "${1:-}" = "--log-level" ]; then
+    LOG_LEVEL="${2:-}"
+elif [ -t 0 ]; then
+    read -rp "Уровень логов [debug/info/warn/error] (Enter: ${LOG_LEVEL}): " selected_level
+    LOG_LEVEL="${selected_level:-$LOG_LEVEL}"
+fi
+case "$LOG_LEVEL" in
+    debug|info|warn|error) ;;
+    *) echo "Некорректный уровень логов: $LOG_LEVEL" >&2; exit 1 ;;
+esac
+mkdir -p /etc/wdtt /etc/systemd/system/wdtt.service.d
+touch /etc/wdtt/.env
+if grep -q '^WDTT_LOG_LEVEL=' /etc/wdtt/.env; then
+    sed -i "s/^WDTT_LOG_LEVEL=.*/WDTT_LOG_LEVEL=${LOG_LEVEL}/" /etc/wdtt/.env
+else
+    printf '\nWDTT_LOG_LEVEL=%s\n' "$LOG_LEVEL" >> /etc/wdtt/.env
+fi
+chmod 600 /etc/wdtt/.env
+printf '[Service]\nEnvironmentFile=-/etc/wdtt/.env\n' > /etc/systemd/system/wdtt.service.d/10-env.conf
+
 echo -e "${CYAN}${BOLD}"
 echo "═══════════════════════════════════════════════════════"
 echo "    Быстрое обновление WDTT из Git-репозитория"

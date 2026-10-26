@@ -14,6 +14,37 @@ type panelSplitWriter struct {
 	panel  *os.File
 }
 
+type levelWriter struct {
+	next  io.Writer
+	level int
+}
+
+func (w levelWriter) Write(p []byte) (int, error) {
+	message := strings.ToLower(string(p))
+	severity := 1 // Messages without a level are informational.
+	if strings.Contains(message, "error") || strings.Contains(message, "fatal") || strings.Contains(message, "fail") || strings.Contains(message, "ошиб") || strings.Contains(message, "не удалось") || strings.Contains(message, "недоступ") {
+		severity = 3
+	} else if strings.Contains(message, "warn") || strings.Contains(message, "предуп") {
+		severity = 2
+	} else if strings.Contains(message, "debug") || strings.Contains(message, "trace") {
+		severity = 0
+	}
+	if severity < w.level {
+		return len(p), nil
+	}
+	return w.next.Write(p)
+}
+
+// ConfigureLogLevel applies WDTT_LOG_LEVEL to Go's standard logger.
+func ConfigureLogLevel() {
+	levels := map[string]int{"debug": 0, "info": 1, "warn": 2, "error": 3}
+	level, ok := levels[strings.ToLower(strings.TrimSpace(os.Getenv("WDTT_LOG_LEVEL")))]
+	if !ok {
+		level = 1
+	}
+	log.SetOutput(levelWriter{next: log.Writer(), level: level})
+}
+
 func (w *panelSplitWriter) Write(p []byte) (int, error) {
 	msg := strings.TrimSpace(string(p))
 	if msg != "" {

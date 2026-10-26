@@ -37,37 +37,37 @@ const (
 )
 
 type PanelConfig struct {
-	Username      string `json:"username"`
-	PasswordHash  string `json:"password_hash"`
-	Port          int    `json:"port"`
-	WebBasePath   string `json:"web_base_path"`
-	SessionKey    string `json:"session_key"`
-	ApiKey        string `json:"apiKey,omitempty"`
-	WebListen     string `json:"webListen,omitempty"`
-	WebDomain     string `json:"webDomain,omitempty"`
-	WebCertFile   string `json:"webCertFile,omitempty"`
-	WebKeyFile    string `json:"webKeyFile,omitempty"`
-	SessionMaxAge int    `json:"sessionMaxAge,omitempty"`
-	PageSize      int    `json:"pageSize,omitempty"`
-	RemarkModel   string `json:"remarkModel,omitempty"`
-	BlockPing     bool   `json:"blockPing,omitempty"`
-	SubEnable     bool   `json:"subEnable,omitempty"`
-	SubListen     string `json:"subListen,omitempty"`
-	SubPort       int    `json:"subPort,omitempty"`
-	SubPath       string `json:"subPath,omitempty"`
-	SubDomain     string `json:"subDomain,omitempty"`
-	SubCertFile   string `json:"subCertFile,omitempty"`
-	SubKeyFile    string `json:"subKeyFile,omitempty"`
-	SubEncrypt    bool   `json:"subEncrypt,omitempty"`
-	SubTitle      string `json:"subTitle,omitempty"`
-	SubSupportURL string `json:"subSupportUrl,omitempty"`
-	SubProfileURL string `json:"subProfileUrl,omitempty"`
-	SubAnnounce   string `json:"subAnnounce,omitempty"`
-	SubURI        string `json:"subURI,omitempty"`
-	SubShowInfo   bool   `json:"subShowInfo,omitempty"`
-	DashboardPollSec   int `json:"dashboardPollSec,omitempty"`
-	UsersPollSec       int `json:"usersPollSec,omitempty"`
-	ConnectionsPollSec int `json:"connectionsPollSec,omitempty"`
+	Username           string `json:"username"`
+	PasswordHash       string `json:"password_hash"`
+	Port               int    `json:"port"`
+	WebBasePath        string `json:"web_base_path"`
+	SessionKey         string `json:"session_key"`
+	ApiKey             string `json:"apiKey,omitempty"`
+	WebListen          string `json:"webListen,omitempty"`
+	WebDomain          string `json:"webDomain,omitempty"`
+	WebCertFile        string `json:"webCertFile,omitempty"`
+	WebKeyFile         string `json:"webKeyFile,omitempty"`
+	SessionMaxAge      int    `json:"sessionMaxAge,omitempty"`
+	PageSize           int    `json:"pageSize,omitempty"`
+	RemarkModel        string `json:"remarkModel,omitempty"`
+	BlockPing          bool   `json:"blockPing,omitempty"`
+	SubEnable          bool   `json:"subEnable,omitempty"`
+	SubListen          string `json:"subListen,omitempty"`
+	SubPort            int    `json:"subPort,omitempty"`
+	SubPath            string `json:"subPath,omitempty"`
+	SubDomain          string `json:"subDomain,omitempty"`
+	SubCertFile        string `json:"subCertFile,omitempty"`
+	SubKeyFile         string `json:"subKeyFile,omitempty"`
+	SubEncrypt         bool   `json:"subEncrypt,omitempty"`
+	SubTitle           string `json:"subTitle,omitempty"`
+	SubSupportURL      string `json:"subSupportUrl,omitempty"`
+	SubProfileURL      string `json:"subProfileUrl,omitempty"`
+	SubAnnounce        string `json:"subAnnounce,omitempty"`
+	SubURI             string `json:"subURI,omitempty"`
+	SubShowInfo        bool   `json:"subShowInfo,omitempty"`
+	DashboardPollSec   int    `json:"dashboardPollSec,omitempty"`
+	UsersPollSec       int    `json:"usersPollSec,omitempty"`
+	ConnectionsPollSec int    `json:"connectionsPollSec,omitempty"`
 }
 
 func loadPanelConfig() (*PanelConfig, error) {
@@ -82,6 +82,32 @@ func loadPanelConfig() (*PanelConfig, error) {
 		return createDefaultPanelConfig()
 	}
 	return nil, err
+}
+
+// ResetAdminCredentials is used by the local CLI; the password is never passed as a process argument.
+func ResetAdminCredentials(username, password string) error {
+	username = strings.TrimSpace(username)
+	if password == "" {
+		return fmt.Errorf("password is required")
+	}
+	if len([]byte(password)) > 72 {
+		return fmt.Errorf("password is too long (bcrypt limit: 72 bytes)")
+	}
+	cfg, err := loadPanelConfig()
+	if err != nil {
+		return err
+	}
+	if username == "" {
+		username = cfg.Username
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	cfg.Username = username
+	cfg.PasswordHash = string(hash)
+	cfg.SessionKey = randomHex(32)
+	return savePanelConfig(cfg)
 }
 
 func finalizePanelConfig(cfg *PanelConfig) (*PanelConfig, error) {
@@ -276,19 +302,19 @@ func createDefaultPanelConfig() (*PanelConfig, error) {
 		}
 	}
 	cfg := &PanelConfig{
-		Username:      user,
-		PasswordHash:  string(hash),
-		Port:          port,
-		WebBasePath:   "/wdtt/",
-		SessionKey:    randomHex(32),
-		SessionMaxAge: 60,
-		PageSize:      50,
-		RemarkModel:   "-ieo",
-		SubEnable:     true,
-		SubPort:       2096,
-		SubPath:       "/sub/",
-		SubEncrypt:    true,
-		SubShowInfo:   true,
+		Username:           user,
+		PasswordHash:       string(hash),
+		Port:               port,
+		WebBasePath:        "/wdtt/",
+		SessionKey:         randomHex(32),
+		SessionMaxAge:      60,
+		PageSize:           50,
+		RemarkModel:        "-ieo",
+		SubEnable:          true,
+		SubPort:            2096,
+		SubPath:            "/sub/",
+		SubEncrypt:         true,
+		SubShowInfo:        true,
 		DashboardPollSec:   defaultDashboardPollSec,
 		UsersPollSec:       defaultUsersPollSec,
 		ConnectionsPollSec: defaultConnectionsPollSec,
@@ -321,37 +347,37 @@ func (c *PanelConfig) sessionDuration() time.Duration {
 
 func panelSettingsMap(cfg *PanelConfig) map[string]interface{} {
 	return map[string]interface{}{
-		"webListen":        cfg.WebListen,
-		"webDomain":        cfg.WebDomain,
-		"webPort":          cfg.Port,
-		"webBasePath":      cfg.WebBasePath,
-		"sessionMaxAge":    cfg.SessionMaxAge,
-		"pageSize":         cfg.PageSize,
-		"remarkModel":      cfg.RemarkModel,
-		"webCertFile":      cfg.WebCertFile,
-		"webKeyFile":       cfg.WebKeyFile,
-		"twoFactorEnable":  false,
-		"blockPing":        cfg.BlockPing,
-		"blockPingLive":    ufwPingBlocked(),
-		"ufwInstalled":     ufwInstalled(),
-		"ufwActive":        ufwActive(),
-		"sshPort":          detectSSHPort(),
-		"dbEnabled":        panelDBEnabled(),
-		"dbPath":           panelDBPath,
-		"subEnable":        cfg.SubEnable,
-		"subListen":        cfg.SubListen,
-		"subPort":          cfg.SubPort,
-		"subPath":          cfg.SubPath,
-		"subDomain":        cfg.SubDomain,
-		"subCertFile":      cfg.SubCertFile,
-		"subKeyFile":       cfg.SubKeyFile,
-		"subEncrypt":       cfg.SubEncrypt,
-		"subTitle":         cfg.SubTitle,
-		"subSupportUrl":    cfg.SubSupportURL,
-		"subProfileUrl":    cfg.SubProfileURL,
-		"subAnnounce":      cfg.SubAnnounce,
-		"subURI":           cfg.SubURI,
-		"subShowInfo":      cfg.SubShowInfo,
+		"webListen":          cfg.WebListen,
+		"webDomain":          cfg.WebDomain,
+		"webPort":            cfg.Port,
+		"webBasePath":        cfg.WebBasePath,
+		"sessionMaxAge":      cfg.SessionMaxAge,
+		"pageSize":           cfg.PageSize,
+		"remarkModel":        cfg.RemarkModel,
+		"webCertFile":        cfg.WebCertFile,
+		"webKeyFile":         cfg.WebKeyFile,
+		"twoFactorEnable":    false,
+		"blockPing":          cfg.BlockPing,
+		"blockPingLive":      ufwPingBlocked(),
+		"ufwInstalled":       ufwInstalled(),
+		"ufwActive":          ufwActive(),
+		"sshPort":            detectSSHPort(),
+		"dbEnabled":          panelDBEnabled(),
+		"dbPath":             panelDBPath,
+		"subEnable":          cfg.SubEnable,
+		"subListen":          cfg.SubListen,
+		"subPort":            cfg.SubPort,
+		"subPath":            cfg.SubPath,
+		"subDomain":          cfg.SubDomain,
+		"subCertFile":        cfg.SubCertFile,
+		"subKeyFile":         cfg.SubKeyFile,
+		"subEncrypt":         cfg.SubEncrypt,
+		"subTitle":           cfg.SubTitle,
+		"subSupportUrl":      cfg.SubSupportURL,
+		"subProfileUrl":      cfg.SubProfileURL,
+		"subAnnounce":        cfg.SubAnnounce,
+		"subURI":             cfg.SubURI,
+		"subShowInfo":        cfg.SubShowInfo,
 		"dashboardPollSec":   cfg.DashboardPollSec,
 		"usersPollSec":       cfg.UsersPollSec,
 		"connectionsPollSec": cfg.ConnectionsPollSec,

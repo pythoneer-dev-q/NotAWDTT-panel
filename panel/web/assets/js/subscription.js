@@ -22,6 +22,7 @@
     downloadByte: parseInt(el.getAttribute('data-downloadbyte') || '0', 10) || 0,
     uploadByte: parseInt(el.getAttribute('data-uploadbyte') || '0', 10) || 0,
     totalByte: parseInt(el.getAttribute('data-totalbyte') || '0', 10) || 0,
+    deactivated: el.getAttribute('data-deactivated') === 'true',
     datepicker: el.getAttribute('data-datepicker') || 'gregorian',
   };
 
@@ -39,7 +40,8 @@
 
   function drawQR(value) {
     try {
-      new QRious({ element: document.getElementById('qrcode'), value, size: 220 });
+      const canvas = document.getElementById('qrcode');
+      if (canvas) new QRious({ element: canvas, value, size: 220 });
     } catch (e) {
       console.warn(e);
     }
@@ -135,6 +137,10 @@
       } catch (e) { /* ignore */ }
     },
     computed: {
+      usagePercent() {
+        if (!this.app.totalByte) return 0;
+        return Math.max(0, Math.min(100, Math.round(100 * (this.app.uploadByte + this.app.downloadByte) / this.app.totalByte)));
+      },
       isUnlimited() {
         return !this.app.totalByte;
       },
@@ -142,7 +148,7 @@
         const now = Date.now();
         const expiryOk = !this.app.expireMs || this.app.expireMs >= now;
         const trafficOk = !this.app.totalByte || (this.app.uploadByte + this.app.downloadByte) <= this.app.totalByte;
-        return expiryOk && trafficOk;
+        return !this.app.deactivated && expiryOk && trafficOk;
       },
     },
     methods: {

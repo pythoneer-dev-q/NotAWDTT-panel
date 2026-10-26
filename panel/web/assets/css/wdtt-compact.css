@@ -1,0 +1,31 @@
+/* Shared density rules for the administration pages. */
+#app:not(.login-app):not(.subscription-page) .ant-card {
+  border-radius: 10px;
+}
+#app:not(.login-app):not(.subscription-page) .ant-card-head {
+  min-height: 42px;
+}
+#app:not(.login-app):not(.subscription-page) .ant-card-head-title,
+#app:not(.login-app):not(.subscription-page) .ant-card-extra {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+#app:not(.login-app):not(.subscription-page) .ant-card-body {
+  padding: 16px;
+}
+#app:not(.login-app):not(.subscription-page) .ant-table-thead > tr > th,
+#app:not(.login-app):not(.subscription-page) .ant-table-tbody > tr > td {
+  padding: 10px 12px;
+}
+#app:not(.login-app):not(.subscription-page) .ant-form-item {
+  margin-bottom: 14px;
+}
+@media (max-width: 768px) {
+  #app:not(.login-app):not(.subscription-page) .ant-card-body {
+    padding: 12px;
+  }
+  #app:not(.login-app):not(.subscription-page) .ant-table-thead > tr > th,
+  #app:not(.login-app):not(.subscription-page) .ant-table-tbody > tr > td {
+    padding: 8px;
+  }
+}

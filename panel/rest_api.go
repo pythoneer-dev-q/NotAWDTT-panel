@@ -713,16 +713,12 @@ func (a *App) handleRestNodeItem(w http.ResponseWriter, r *http.Request) {
 				restError(w, http.StatusNotFound, "node not found")
 				return
 			}
-			conn, pingErr := net.DialTimeout("udp", net.JoinHostPort(n.Host, strconv.Itoa(n.DtlsPort)), 2*time.Second)
-			reachable := pingErr == nil
-			if conn != nil {
-				_ = conn.Close()
-			}
+			_, resolveErr := net.ResolveUDPAddr("udp", net.JoinHostPort(n.Host, strconv.Itoa(n.DtlsPort)))
 			restJSON(w, http.StatusOK, map[string]interface{}{
-				"success":   true,
-				"node_id":   n.ID,
-				"host":      n.Host,
-				"reachable": reachable,
+				"success":  true,
+				"node_id":  n.ID,
+				"host":     n.Host,
+				"resolved": resolveErr == nil,
 			})
 			return
 		}

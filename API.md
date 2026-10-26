@@ -36,7 +36,7 @@ curl -H "X-API-Key: ВАШ_КЛЮЧ" "https://SERVER:2860/api/users"
 - `GET /api/nodes` — список подключённых внешних VPS
 - `POST /api/nodes` — добавление новой ноды
 - `DELETE /api/nodes/{id}` — удаление ноды
-- `POST /api/nodes/{id}/ping` — проверка доступности ноды
+- `POST /api/nodes/{id}/ping` — проверка разрешения адреса (`resolved`); онлайн определяется по heartbeat ноды
 
 ### Система
 - `GET /api/status` — статус сервера, память, службы, трафик

@@ -66,7 +66,9 @@ function show_status() {
 
     # 2. MongoDB
     local mongo_uri="${MONGODB_URI:-mongodb://127.0.0.1:27017/wdtt}"
-    echo -e "MongoDB URI:        ${CYAN}${mongo_uri}${NC}"
+    local safe_mongo_uri
+    safe_mongo_uri=$(printf '%s' "$mongo_uri" | sed -E 's#(mongodb(\+srv)?://)[^/@]+:[^/@]+@#\1***:***@#')
+    echo -e "MongoDB URI:        ${CYAN}${safe_mongo_uri}${NC}"
     if systemctl is-active --quiet mongod 2>/dev/null || systemctl is-active --quiet mongodb 2>/dev/null; then
         echo -e "База данных:        ${GREEN}● mongod активна${NC}"
     elif [[ "$mongo_uri" != *"127.0.0.1"* && "$mongo_uri" != *"localhost"* ]]; then
@@ -190,22 +192,38 @@ function restart_service() {
 
 function reset_admin_password() {
     echo -e "\n${BOLD}=== СБРОС ПАРОЛЯ АДМИНИСТРАТОРА ПАНЕЛИ ===${NC}"
-    read -rp "Введите новый логин панели (default: admin): " new_user
-    new_user="${new_user:-admin}"
+    read -rp "Новый логин панели (Enter — оставить текущий): " new_user
     read -rsp "Введите новый пароль панели: " new_pass
     echo ""
     if [ -z "$new_pass" ]; then
         echo -e "${RED}Пароль не может быть пустым!${NC}"
         return
     fi
-
-    # Обновление в MongoDB если mongosh установлен
-    if command -v mongosh >/dev/null 2>&1; then
-        mongosh wdtt --quiet --eval "db.panel_config.updateOne({_id: 1}, {\$set: {username: '$new_user'}})" >/dev/null 2>&1 || true
+    local confirm_pass
+    read -rsp "Повторите пароль: " confirm_pass
+    echo ""
+    if [ "$new_pass" != "$confirm_pass" ]; then
+        echo -e "${RED}Пароли не совпадают${NC}"
+        return 1
     fi
 
+    local app_bin="/usr/local/bin/wdtt-app"
+    if [ ! -x "$app_bin" ]; then
+        echo -e "${RED}Бинарник панели не найден: $app_bin${NC}"
+        return 1
+    fi
+    if ! printf '%s\n' "$new_pass" | "$app_bin" -reset-admin "$new_user"; then
+        echo -e "${RED}Не удалось обновить реквизиты входа${NC}"
+        return 1
+    fi
+    systemctl restart "$SERVICE_NAME"
+
     echo -e "${GREEN}✓ Реквизиты входа обновлены!${NC}"
-    echo -e "Логин:  ${BOLD}${new_user}${NC}"
+    if [ -n "$new_user" ]; then
+        echo -e "Логин:  ${BOLD}${new_user}${NC}"
+    else
+        echo "Логин оставлен прежним"
+    fi
     echo -e "Панель: ${CYAN}http://$(get_public_ip):${PANEL_PORT}/wdtt/${NC}"
 }
 
@@ -262,8 +280,7 @@ function interactive_menu() {
             9)
                 echo -e "\n${BOLD}Вход в веб-панель:${NC}"
                 echo -e "URL:    ${CYAN}http://$(get_public_ip):${PANEL_PORT}/wdtt/${NC}"
-                echo -e "Логин:  ${BOLD}admin${NC} (по умолчанию)"
-                echo -e "Пароль: ${BOLD}wdtt${NC} (по умолчанию)"
+                echo "Текущие реквизиты не отображаются. Для смены используйте wdtt password."
                 read -rp "Нажмите Enter для продолжения..."
                 ;;
             0) exit 0 ;;

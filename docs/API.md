@@ -305,11 +305,12 @@ X-API-Key: <API_KEY>
 }
 ```
 
-#### Проверить доступность (Ping)
+#### Проверить адрес ноды
 ```http
 POST /api/nodes/{id}/ping
 X-API-Key: <API_KEY>
 ```
+Ответ содержит `resolved` (проверка DNS/IP). Реальный статус `online` определяется heartbeat ноды.
 
 #### Удалить ноду
 ```http

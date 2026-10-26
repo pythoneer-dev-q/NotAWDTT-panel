@@ -3,11 +3,13 @@ package panel
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +21,12 @@ func randomToken(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+var installerHostPattern = regexp.MustCompile(`^[A-Za-z0-9.:[\]-]+$`)
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func (a *App) serveNodesPage(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +56,10 @@ func (a *App) handleNodesList(w http.ResponseWriter, r *http.Request) {
 	srvIP := a.serverIP()
 	now := time.Now().Unix()
 	for _, n := range nodes {
+		if !n.IsActive {
+			n.Status = "disabled"
+			continue
+		}
 		if n.IsLocal {
 			if n.Host == "" {
 				n.Host = srvIP
@@ -209,24 +221,18 @@ func (a *App) handleNodePing(w http.ResponseWriter, r *http.Request) {
 		port = 56000
 	}
 
-	start := time.Now()
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
-	conn, err := net.DialTimeout("udp", addr, 2*time.Second)
-	latencyMs := time.Since(start).Milliseconds()
+	_, err := net.ResolveUDPAddr("udp", addr)
 
 	if err != nil {
 		jsonOK(w, map[string]interface{}{
-			"reachable":  false,
-			"latency_ms": latencyMs,
-			"error":      err.Error(),
+			"resolved": false,
+			"error":    err.Error(),
 		})
 		return
 	}
-	_ = conn.Close()
-
 	jsonOK(w, map[string]interface{}{
-		"reachable":  true,
-		"latency_ms": latencyMs,
+		"resolved": true,
 	})
 }
 
@@ -347,13 +353,37 @@ func (a *App) handleNodeBinary(w http.ResponseWriter, r *http.Request) {
 
 // handleNodeInstallScript — возвращает скрипт подключения для нового VPS
 func (a *App) handleNodeInstallScript(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !installerHostPattern.MatchString(r.Host) {
+		http.Error(w, "invalid host", http.StatusBadRequest)
+		return
+	}
 	token := r.URL.Query().Get("token")
 	nodeID := r.URL.Query().Get("id")
-
-	masterHost := a.serverIP()
-	if port := a.cfg.Port; port != 0 && port != 80 {
-		masterHost = fmt.Sprintf("%s:%d", masterHost, port)
+	if token == "" || nodeID == "" {
+		http.Error(w, "missing node credentials", http.StatusBadRequest)
+		return
 	}
+	m, err := paneldb.GetDefaultMongo()
+	if err != nil {
+		http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	node, err := m.GetNode(ctx, nodeID)
+	if err != nil || node == nil || node.IsLocal || !node.IsActive || subtle.ConstantTimeCompare([]byte(node.ApiKey), []byte(token)) != 1 {
+		http.Error(w, "invalid or disabled node", http.StatusForbidden)
+		return
+	}
+	scheme := "http"
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
+	masterURL := fmt.Sprintf("%s://%s%spanel/api", scheme, r.Host, a.cfg.basePath())
 
 	script := fmt.Sprintf(`#!/usr/bin/env bash
 set -e
@@ -361,24 +391,28 @@ echo "════════════════════════�
 echo "    Подключение VPS-ноды к панели WDTT"
 echo "═══════════════════════════════════════════════════════"
 
-NODE_TOKEN="%s"
-NODE_ID="%s"
-MASTER_URL="http://%s%spanel/api"
+NODE_TOKEN=%s
+NODE_ID=%s
+MASTER_URL=%s
 
 echo "[1/4] Обновление пакетов и установка зависимостей..."
 apt-get update -y && apt-get install -y curl iptables tar ca-certificates
 
 echo "[2/4] Загрузка бинарника WDTT..."
 mkdir -p /etc/wdtt /usr/local/bin
-curl -fsSL "${MASTER_URL}/node/binary" -o /usr/local/bin/wdtt || curl -fsSL "http://%s%sweb/assets/bin/wdtt" -o /usr/local/bin/wdtt || true
-chmod +x /usr/local/bin/wdtt
+curl -fsSL "${MASTER_URL}/node/binary" -o /usr/local/bin/wdtt.new
+chmod +x /usr/local/bin/wdtt.new
+mv /usr/local/bin/wdtt.new /usr/local/bin/wdtt
 
 echo "[3/4] Создание конфигурации ноды..."
 cat <<EOF > /etc/wdtt/node.conf
 MASTER_URL=${MASTER_URL}
 NODE_TOKEN=${NODE_TOKEN}
 NODE_ID=${NODE_ID}
+WDTT_DTLS_PORT=%d
+WDTT_RAW_PORT=%d
 EOF
+chmod 600 /etc/wdtt/node.conf
 
 echo "[4/4] Настройка службы wdtt-node..."
 cat <<EOF > /etc/systemd/system/wdtt-node.service
@@ -388,7 +422,8 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/wdtt -no-panel -node-sync ${MASTER_URL} -node-token ${NODE_TOKEN}
+EnvironmentFile=/etc/wdtt/node.conf
+ExecStart=/usr/local/bin/wdtt -no-panel -node-config /etc/wdtt/node.conf
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
@@ -399,11 +434,13 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now wdtt-node.service 2>/dev/null || true
+systemctl enable wdtt-node.service
+systemctl restart wdtt-node.service
 
 echo "✓ Нода успешно подключена и запущена!"
-`, token, nodeID, masterHost, a.cfg.basePath(), masterHost, a.cfg.basePath())
+`, shellQuote(token), shellQuote(nodeID), shellQuote(masterURL), node.DtlsPort, node.RawPort)
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(script))
 }

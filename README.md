@@ -65,9 +65,12 @@ sudo bash setup.sh
 4. Настроит глобальный алиас командной строки `wdtt`.
 
 ### Вариант 2: Онлайн-установщик
+[Онлайн-установщик WDTT](https://github.com/ildarmaga/wdtt-install/blob/main/install.sh) запускается одной командой:
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/ildarmaga/wdtt-install/main/install.sh)
 ```
+
+Для дополнительного VPS создайте ноду в панели и скопируйте её персональную команду из раздела «Ноды». Ключ подключения уже включён в команду; храните её как пароль.
 
 Панель: `http://IP:2860/wdtt/` (или `/`) — логин `admin` / `wdtt` (смените в настройках).
 
@@ -82,6 +85,7 @@ wdtt restart          # Перезапуск службы WDTT
 wdtt log              # Просмотр логов в реальном времени (journalctl)
 wdtt backup           # Создание резервной копии базы данных
 wdtt restore <файл>   # Восстановление из архива
+sudo bash update.sh --log-level warn   # Обновление с уменьшенным уровнем логов (debug/info/warn/error)
 ```
 
 ---

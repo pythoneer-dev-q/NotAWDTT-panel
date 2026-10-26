@@ -33,6 +33,8 @@ type RestUserItem struct {
 	DeviceIDs       []string       `json:"device_ids"`
 	DevicesBound    int            `json:"devices_bound"`
 	MaxDevices      int            `json:"max_devices"`
+	MaxDownMBps     float64        `json:"max_down_mbps"`
+	MaxUpMBps       float64        `json:"max_up_mbps"`
 	Online          bool           `json:"online"`
 	LastSeenAt      int64          `json:"last_seen_at"`
 	VkHash          string         `json:"vk_hash,omitempty"`
@@ -612,6 +614,8 @@ func (a *App) buildSingleRestUserWithNodes(db *PasswordsDB, pass string, inbound
 		DeviceIDs:       entry.DeviceIDs,
 		DevicesBound:    len(entry.DeviceIDs),
 		MaxDevices:      entryMaxDevices(db, pass, entry),
+		MaxDownMBps:     entry.MaxDownMBps,
+		MaxUpMBps:       entry.MaxUpMBps,
 		Online:          userOnlineFromStats(pass, deviceIDsDisplay(entry), pass == db.MainPassword, stats),
 		LastSeenAt:      entry.LastSeenAt,
 		VkHash:          entry.VkHash,

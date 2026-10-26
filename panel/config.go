@@ -144,9 +144,8 @@ func finalizePanelConfig(cfg *PanelConfig) (*PanelConfig, error) {
 	if cfg.Port == 0 {
 		cfg.Port = 2860
 	}
-	if cfg.WebBasePath == "" {
-		cfg.WebBasePath = "/wdtt/"
-	}
+	// Panel path is fixed and cannot be changed by users.
+	cfg.WebBasePath = "/wdtt/"
 	if cfg.SessionKey == "" {
 		cfg.SessionKey = randomHex(32)
 		if err := savePanelConfig(cfg); err != nil {
@@ -183,9 +182,8 @@ func normalizePanelConfig(cfg *PanelConfig) {
 	if cfg.Port == 0 {
 		cfg.Port = 2860
 	}
-	if cfg.WebBasePath == "" {
-		cfg.WebBasePath = "/wdtt/"
-	}
+	// Panel path is fixed and cannot be changed by users.
+	cfg.WebBasePath = "/wdtt/"
 	if cfg.SessionMaxAge <= 0 {
 		cfg.SessionMaxAge = 60
 	}

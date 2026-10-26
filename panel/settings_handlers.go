@@ -160,14 +160,8 @@ func (a *App) handleSettingUpdate(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "неверный порт панели", 400)
 		return
 	}
-	if req.WebBasePath != "" {
-		if !strings.HasPrefix(req.WebBasePath, "/") {
-			req.WebBasePath = "/" + req.WebBasePath
-		}
-		if !strings.HasSuffix(req.WebBasePath, "/") {
-			req.WebBasePath += "/"
-		}
-	}
+	// Panel path is fixed and cannot be changed by users.
+	req.WebBasePath = "/wdtt/"
 	if req.SessionMaxAge < 60 {
 		req.SessionMaxAge = 60
 	}
@@ -178,9 +172,8 @@ func (a *App) handleSettingUpdate(w http.ResponseWriter, r *http.Request) {
 	a.cfg.WebListen = strings.TrimSpace(req.WebListen)
 	a.cfg.WebDomain = strings.TrimSpace(req.WebDomain)
 	a.cfg.Port = req.WebPort
-	if req.WebBasePath != "" {
-		a.cfg.WebBasePath = req.WebBasePath
-	}
+	// Panel path is fixed and cannot be changed by users.
+	a.cfg.WebBasePath = "/wdtt/"
 	a.cfg.SessionMaxAge = req.SessionMaxAge
 	a.cfg.PageSize = req.PageSize
 	if req.RemarkModel != "" {

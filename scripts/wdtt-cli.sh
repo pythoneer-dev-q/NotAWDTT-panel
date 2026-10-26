@@ -248,6 +248,59 @@ function edit_env() {
     fi
 }
 
+function reinstall_wdtt() {
+    local mode_flag="--panel-node"
+    if [ "${WDTT_INSTALL_MODE:-}" = "panel" ]; then
+        mode_flag="--panel-only"
+    fi
+    echo -e "${YELLOW}Переустановка WDTT. Конфигурация и MongoDB сохранятся.${NC}"
+    read -rp "Продолжить? [y/N]: " confirm
+    [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Отмена."; return 0; }
+
+    local source_dir="${WDTT_INSTALL_SOURCE_DIR:-}"
+    if [ -z "$source_dir" ] && [ -f /etc/wdtt/source-dir ]; then
+        IFS= read -r source_dir < /etc/wdtt/source-dir
+    fi
+    source_dir="${source_dir:-/usr/local/src/wdtt-panel-install}"
+    if [ -f "$source_dir/setup.sh" ]; then
+        if [ -d "$source_dir/.git" ]; then
+            git -C "$source_dir" pull --ff-only || return 1
+        fi
+        bash "$source_dir/setup.sh" "$mode_flag"
+        return
+    fi
+    local bootstrap
+    bootstrap=$(mktemp) || return 1
+    if ! curl -fsSL --retry 2 'https://raw.githubusercontent.com/pythoneer-dev-q/NotAWDTT-panel/main/install.sh' -o "$bootstrap"; then
+        rm -f -- "$bootstrap"
+        echo -e "${RED}Не удалось загрузить установщик. Укажите WDTT_INSTALL_SOURCE_DIR с локальным репозиторием.${NC}" >&2
+        return 1
+    fi
+    bash "$bootstrap" "$mode_flag"
+    local result=$?
+    rm -f -- "$bootstrap"
+    return "$result"
+}
+
+function uninstall_wdtt() {
+    echo -e "${YELLOW}Будут удалены служба WDTT, её бинарник и команда wdtt.${NC}"
+    echo "Конфигурация /etc/wdtt, резервные копии и MongoDB сохранятся."
+    read -rp "Введите УДАЛИТЬ для подтверждения: " confirm
+    [ "$confirm" = "УДАЛИТЬ" ] || { echo "Отмена."; return 0; }
+
+    systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
+    if [ -x /usr/local/bin/wdtt-xray-rules.sh ]; then
+        /usr/local/bin/wdtt-xray-rules.sh down || true
+    fi
+    if [ -x /usr/local/bin/wdtt-mtu-rules.sh ]; then
+        /usr/local/bin/wdtt-mtu-rules.sh down || true
+    fi
+    rm -f -- /etc/systemd/system/wdtt.service /etc/systemd/system/wdtt.service.d/10-env.conf
+    rm -f -- /usr/local/bin/wdtt-app /usr/local/bin/wdtt /usr/local/bin/wdtt-xray-rules.sh /usr/local/bin/wdtt-mtu-rules.sh /etc/profile.d/wdtt.sh
+    systemctl daemon-reload
+    echo -e "${GREEN}WDTT удалён. Данные остались в /etc/wdtt и MongoDB.${NC}"
+}
+
 function interactive_menu() {
     check_root
     while true; do
@@ -263,9 +316,11 @@ function interactive_menu() {
         echo "  8) Сменить пароль администратора панели"
         echo "  9) Информация для входа в панель"
         echo "  10) Редактировать конфигурацию .env (MongoDB, порты)"
+        echo "  11) Переустановить WDTT"
+        echo "  12) Удалить WDTT (с сохранением данных)"
         echo "  0) Выход"
         echo "─────────────────────────────────────────────────"
-        read -rp "Введите номер [0-10]: " choice
+        read -rp "Введите номер [0-12]: " choice
 
         case "$choice" in
             1) show_status; read -rp "Нажмите Enter для продолжения..." ;;
@@ -277,6 +332,8 @@ function interactive_menu() {
             7) restore_backup ""; read -rp "Нажмите Enter для продолжения..." ;;
             8) reset_admin_password; read -rp "Нажмите Enter для продолжения..." ;;
             10) edit_env ;;
+            11) reinstall_wdtt; read -rp "Нажмите Enter для продолжения..." ;;
+            12) uninstall_wdtt; return ;;
             9)
                 echo -e "\n${BOLD}Вход в веб-панель:${NC}"
                 echo -e "URL:    ${CYAN}http://$(get_public_ip):${PANEL_PORT}/wdtt/${NC}"
@@ -322,6 +379,12 @@ case "${1:-}" in
     env|config)
         edit_env
         ;;
+    reinstall)
+        reinstall_wdtt
+        ;;
+    uninstall|remove)
+        uninstall_wdtt
+        ;;
     info)
         echo -e "Панель: http://$(get_public_ip):${PANEL_PORT}/wdtt/"
         ;;
@@ -338,6 +401,8 @@ case "${1:-}" in
         echo "  wdtt restore    - Восстановить из бэкапа"
         echo "  wdtt logs       - Просмотр логов в реальном времени"
         echo "  wdtt password   - Сбросить пароль администратора"
+        echo "  wdtt reinstall  - Переустановить WDTT с сохранением данных"
+        echo "  wdtt uninstall  - Удалить службу и бинарники с сохранением данных"
         ;;
     *)
         interactive_menu

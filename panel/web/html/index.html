@@ -31,7 +31,7 @@
   .index-page .console-heading p { margin:5px 0 0; opacity:.55; }
   .index-page .resource-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
   .index-page .resource-card { min-height:136px; border:1px solid #30352e; border-radius:17px; background:#20231f; padding:18px 20px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
-  .index-page .resource-card .resource-icon { width:36px; height:36px; border-radius:11px; display:grid; place-items:center; color:#f46b17; background:rgba(244,107,23,.13); font-size:17px; }
+  .index-page .resource-card .resource-icon { width:36px; height:36px; border-radius:11px; display:grid; place-items:center; color:var(--wdtt-accent); background:var(--wdtt-accent-soft); font-size:17px; }
   .index-page .resource-card .resource-label { color:#a2aaa0; font-size:13px; margin:11px 0 3px; }
   .index-page .resource-card strong { display:block; font-size:25px; letter-spacing:-.03em; }
   .index-page .resource-card small { display:block; color:#889187; margin-top:4px; }
@@ -148,12 +148,12 @@
         <a-row class="dashboard-grid" :gutter="isMobile ? 8 : 16">
               <a-col :span="24">
                 <div class="resource-grid">
-                  <div class="resource-card"><div><span class="resource-icon"><a-icon type="dashboard" /></span><div class="resource-label">CPU</div><strong>[[ status.cpu.percent ]]%</strong><small>[[ status.logicalPro ]] ядер</small></div><a-progress type="circle" :width="62" :percent="status.cpu.percent" stroke-color="#f46b17" /></div>
-                  <div class="resource-card"><div><span class="resource-icon"><a-icon type="database" /></span><div class="resource-label">RAM</div><strong>[[ SizeFormatter.sizeFormat(status.mem.current) ]]</strong><small>из [[ SizeFormatter.sizeFormat(status.mem.total) ]]</small></div><a-progress type="circle" :width="62" :percent="status.mem.percent" stroke-color="#f46b17" /></div>
-                  <div class="resource-card"><div><span class="resource-icon"><a-icon type="hdd" /></span><div class="resource-label">Диск</div><strong>[[ SizeFormatter.sizeFormat(status.disk.current) ]]</strong><small>из [[ SizeFormatter.sizeFormat(status.disk.total) ]]</small></div><a-progress type="circle" :width="62" :percent="status.disk.percent" stroke-color="#f46b17" /></div>
+                  <div class="resource-card"><div><span class="resource-icon"><a-icon type="dashboard" /></span><div class="resource-label">CPU</div><strong>[[ status.cpu.percent ]]%</strong><small>[[ status.logicalPro ]] ядер</small></div><a-progress type="circle" :width="62" :percent="status.cpu.percent" :stroke-color="accentColor" /></div>
+                  <div class="resource-card"><div><span class="resource-icon"><a-icon type="database" /></span><div class="resource-label">RAM</div><strong>[[ SizeFormatter.sizeFormat(status.mem.current) ]]</strong><small>из [[ SizeFormatter.sizeFormat(status.mem.total) ]]</small></div><a-progress type="circle" :width="62" :percent="status.mem.percent" :stroke-color="accentColor" /></div>
+                  <div class="resource-card"><div><span class="resource-icon"><a-icon type="hdd" /></span><div class="resource-label">Диск</div><strong>[[ SizeFormatter.sizeFormat(status.disk.current) ]]</strong><small>из [[ SizeFormatter.sizeFormat(status.disk.total) ]]</small></div><a-progress type="circle" :width="62" :percent="status.disk.percent" :stroke-color="accentColor" /></div>
                   <div class="resource-card"><div><span class="resource-icon"><a-icon type="cloud-upload" /></span><div class="resource-label">Общий трафик</div><strong>[[ SizeFormatter.sizeFormat(status.netTraffic.sent + status.netTraffic.recv) ]]</strong><small>↑ [[ SizeFormatter.sizeFormat(status.netTraffic.sent) ]] · ↓ [[ SizeFormatter.sizeFormat(status.netTraffic.recv) ]]</small></div></div>
                 </div>
-                <div class="resource-chart"><div class="resource-chart-head"><h2>Нагрузка CPU</h2><a-button size="small" type="link" @click="openCpuHistory">История</a-button></div><sparkline :data="cpuHistory" :vb-width="840" :height="90" stroke="#f46b17" :stroke-width="2.2" :fill-opacity="0.14" :show-grid="false" :show-axes="false" :show-tooltip="false"></sparkline></div>
+                <div class="resource-chart"><div class="resource-chart-head"><h2>Нагрузка CPU</h2><a-button size="small" type="link" @click="openCpuHistory">История</a-button></div><sparkline :data="cpuHistory" :vb-width="840" :height="90" :stroke="accentColor" :stroke-width="2.2" :fill-opacity="0.14" :show-grid="false" :show-axes="false" :show-tooltip="false"></sparkline></div>
               </a-col>
               <a-col :xs="24" :sm="24" :lg="12">
                 <a-card hoverable class="wdtt-card">
@@ -194,7 +194,7 @@
                   <div style="display:flex; justify-content:space-around; align-items:center; padding:16px 0;">
                     <div style="text-align:center;">
                       <div style="font-size:12px; color:#888;">VPS-ноды</div>
-                      <div style="font-size:20px; font-weight:700; color:#f46b17;">Управление нодами</div>
+                      <div style="font-size:20px; font-weight:700; color:var(--wdtt-accent);">Управление нодами</div>
                     </div>
                     <div style="text-align:center;">
                       <div style="font-size:12px; color:#888;">База данных</div>
@@ -1048,6 +1048,7 @@
     mixins: [MediaQueryMixin],
     data: {
       themeSwitcher,
+      accentColor: WdttAccent.colors[WdttAccent.get()],
       loadingStates: {
         fetched: true,
         spinning: false

@@ -11,7 +11,7 @@
   .nodes-page .node-actions .ant-btn { margin: 0; }
   .nodes-page .node-list { display:grid; gap:10px; }
   .nodes-page .node-row { border:1px solid #343a32; border-radius:13px; padding:14px 16px; display:grid; grid-template-columns:minmax(150px,1.3fr) minmax(150px,1fr) minmax(130px,.8fr) auto; gap:14px; align-items:center; }
-  .nodes-page .node-row.is-online { border-left:3px solid #f46b17; }
+  .nodes-page .node-row.is-online { border-left:3px solid var(--wdtt-accent); }
   .nodes-page .node-row small { display:block; opacity:.55; margin-top:4px; }
   .nodes-page .node-row-name { font-size:15px; font-weight:700; }
   .nodes-page .node-row .node-endpoint { font-family:ui-monospace,Consolas,monospace; font-size:12px; }
@@ -176,13 +176,17 @@
   </a-modal>
 </a-layout>
 
-{{ template "page/body_end" .}}
-
+{{ template "page/body_scripts" .}}
+{{ template "component/aThemeSwitch" .}}
+{{ template "component/wdttSidebar" .}}
 <script>
 new Vue({
+  delimiters: ['[[', ']]'],
+  mixins: [MediaQueryMixin],
   el: '#app',
   data() {
     return {
+      themeSwitcher,
       loading: false,
       serverIP: '',
       nodes: [],
@@ -334,4 +338,5 @@ new Vue({
   },
 });
 </script>
+{{ template "page/body_end" .}}
 

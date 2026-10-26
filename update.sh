@@ -76,6 +76,7 @@ install -m 0755 "$BIN_OUT" /usr/local/bin/wdtt-app
 mkdir -p /etc/wdtt/bin
 cp "$BIN_OUT" /etc/wdtt/bin/wdtt
 install -m 0755 "${SCRIPT_DIR}/scripts/wdtt-cli.sh" /usr/local/bin/wdtt
+printf '%s\n' "$SCRIPT_DIR" > /etc/wdtt/source-dir
 
 echo -e "${CYAN}[4/4] Перезапуск службы wdtt...${NC}"
 systemctl daemon-reload

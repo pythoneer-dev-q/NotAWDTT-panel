@@ -71,6 +71,7 @@
                         <a-tag v-if="row.is_main" color="gold" style="margin-bottom:4px">главный</a-tag>
                         <div class="user-mobile-pass"><code>[[ row.password ]]</code></div>
                         <div class="text-muted" style="font-size:12px;margin-top:2px">[[ row.comment || '—' ]]</div>
+                        <div v-if="row.sub_url" class="user-card-sub"><a :href="row.sub_url" target="_blank" rel="noopener noreferrer" :title="row.sub_url">[[ row.sub_url ]]</a><a-button size="small" icon="copy" title="Копировать подписку" @click="copyUserSubscription(row)"></a-button></div>
                       </div>
                       <div class="user-mobile-status">
                         <a-tag v-if="row.is_deactivated" color="red">блокирован</a-tag>
@@ -107,6 +108,7 @@
                   <span slot="password" slot-scope="text, row">
                     <a-tag v-if="row.is_main" color="gold" style="margin-right:6px">главный</a-tag>
                     <code>[[ text ]]</code>
+                    <div v-if="row.sub_url" class="user-card-sub"><a :href="row.sub_url" target="_blank" rel="noopener noreferrer" :title="row.sub_url">[[ row.sub_url ]]</a><a-button size="small" icon="copy" title="Копировать подписку" @click="copyUserSubscription(row)"></a-button></div>
                   </span>
                   <span slot="comment" slot-scope="text">[[ text || '—' ]]</span>
                   <span slot="vk_hash" slot-scope="text">
@@ -292,6 +294,9 @@ curl -X DELETE -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD"
   .user-conn-client-name a { color: #1890ff; }
   .user-conn-client-name a:hover { text-decoration: underline; }
   .user-conn-open-link { font-size: 11px; margin-left: 8px; color: #1890ff; }
+  .user-card-sub { display:flex; align-items:center; gap:4px; max-width:250px; margin-top:5px; font-size:11px; }
+  .user-card-sub a:first-child { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; min-width:0; color:var(--wdtt-accent); }
+  .user-card-sub .ant-btn { flex:none; }
   #user-modal .qr-box { width: 220px; margin: 0 auto 8px; }
   #user-modal .qr-cv { width: 100%; height: 100%; }
 </style>
@@ -441,6 +446,11 @@ curl -X DELETE -H "X-API-Key: [[ apiKey ]]" "[[ apiOrigin ]]/api/users/PASSWORD"
         const self = this;
         wdttCopyLink(row.link, () => self.toast('Ссылка скопирована: ' + row.password, true),
           (msg) => self.toast(msg || 'Ссылка недоступна', false));
+      },
+      copyUserSubscription(row) {
+        const self = this;
+        wdttCopyLink(row.sub_url, () => self.toast('Подписка скопирована', true),
+          (msg) => self.toast(msg || 'Подписка недоступна', false));
       },
       trafficColor(row) {
         if (!row.total_gb) return 'purple';

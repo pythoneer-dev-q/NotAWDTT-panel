@@ -169,6 +169,7 @@ fi
 
 # Установка CLI-утилиты и правил маршрутизации
 install -m 0755 "${SCRIPT_DIR}/scripts/wdtt-cli.sh" /usr/local/bin/wdtt
+printf '%s\n' "$SCRIPT_DIR" > /etc/wdtt/source-dir
 if [ -f "${SCRIPT_DIR}/scripts/wdtt-xray-rules.sh" ]; then
     install -m 0755 "${SCRIPT_DIR}/scripts/wdtt-xray-rules.sh" /usr/local/bin/wdtt-xray-rules.sh
 fi

@@ -86,6 +86,8 @@ curl -fsSL https://raw.githubusercontent.com/pythoneer-dev-q/NotAWDTT-panel/main
 ```bash
 wdtt status           # Статус демона, MongoDB, портов и ресурсов
 wdtt restart          # Перезапуск службы WDTT
+wdtt reinstall        # Переустановка с сохранением конфигурации и MongoDB
+wdtt uninstall        # Удаление службы и бинарников с сохранением данных
 wdtt log              # Просмотр логов в реальном времени (journalctl)
 wdtt backup           # Создание резервной копии базы данных
 wdtt restore <файл>   # Восстановление из архива

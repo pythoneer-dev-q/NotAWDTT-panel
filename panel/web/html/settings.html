@@ -72,6 +72,21 @@
                   </template>
                   {{ template "settings/panel/vk_creator" . }}
                 </a-tab-pane>
+                <a-tab-pane key="5" :style="{ paddingTop: '20px' }">
+                  <template #tab><a-icon type="bg-colors"></a-icon><span>Оформление</span></template>
+                  <a-card title="Акцентный цвет" class="wdtt-appearance-card">
+                    <p class="text-muted">Цвет кнопок, выделения меню и индикаторов сохраняется в этом браузере.</p>
+                    <div class="wdtt-accent-options">
+                      <button v-for="option in accentOptions" :key="option.key" type="button"
+                        class="wdtt-accent-option" :class="{ selected: accentColor === option.key }"
+                        :aria-pressed="accentColor === option.key" @click="selectAccent(option.key)">
+                        <span class="wdtt-accent-swatch" :style="{ background: option.color }"></span>
+                        <span>[[ option.label ]]</span>
+                        <a-icon v-if="accentColor === option.key" type="check"></a-icon>
+                      </button>
+                    </div>
+                  </a-card>
+                </a-tab-pane>
               </a-tabs>
             </a-col>
           </a-row>
@@ -82,6 +97,11 @@
 </a-layout>
 
 <style>
+  .wdtt-accent-options { display:flex; flex-wrap:wrap; gap:10px; }
+  .wdtt-accent-option { display:inline-flex; align-items:center; gap:9px; padding:10px 12px; min-width:125px; color:inherit; background:transparent; border:1px solid #596159; border-radius:10px; cursor:pointer; }
+  .wdtt-accent-option.selected, .wdtt-accent-option:hover { border-color:var(--wdtt-accent); background:var(--wdtt-accent-soft); }
+  .wdtt-accent-option .anticon { margin-left:auto; color:var(--wdtt-accent); }
+  .wdtt-accent-swatch { width:17px; height:17px; border-radius:50%; flex:none; }
   body.dark {
     background-color: var(--dark-color-background);
   }
@@ -191,6 +211,14 @@
     el: '#app',
     data: {
       themeSwitcher,
+      accentColor: WdttAccent.get(),
+      accentOptions: [
+        { key: 'orange', label: 'Оранжевый', color: '#f46b17' },
+        { key: 'blue', label: 'Синий', color: '#3488f5' },
+        { key: 'green', label: 'Зелёный', color: '#20a783' },
+        { key: 'violet', label: 'Фиолетовый', color: '#9467e8' },
+        { key: 'rose', label: 'Розовый', color: '#e75b7c' },
+      ],
       loadingStates: { fetched: false, spinning: false },
       oldAllSetting: new PanelSetting(),
       allSetting: new PanelSetting(),
@@ -312,6 +340,9 @@
       },
     },
     methods: {
+      selectAccent(color) {
+        this.accentColor = WdttAccent.set(color);
+      },
       loading(spinning = true) {
         this.loadingStates.spinning = spinning;
       },

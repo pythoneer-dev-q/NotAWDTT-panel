@@ -123,6 +123,7 @@ func Run() error {
 	mux.HandleFunc(api+"node/install", app.handleNodeInstallScript)
 	mux.HandleFunc(api+"node/binary", app.handleNodeBinary)
 	mux.HandleFunc(api+"node/cli", app.handleNodeCLI)
+	mux.HandleFunc(api+"node/mtu-rules", app.handleNodeMTURules)
 	mux.HandleFunc(api+"password/main", app.requireAuthCSRF(app.handleMainPassword))
 	mux.HandleFunc(api+"password/panel", app.requireAuthCSRF(app.handlePanelPassword))
 	mux.HandleFunc(api+"xray/versions", app.requireAuthCSRF(app.handleXrayVersions))

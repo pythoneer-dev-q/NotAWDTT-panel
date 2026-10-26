@@ -346,8 +346,8 @@ func obfsIsRTPPacket(wire []byte) bool {
 }
 
 func listenWrapped(addr *net.UDPAddr, keys *wrapKeyStore) (dtlsnet.PacketListener, error) {
-	if keys == nil || keys.Count() == 0 {
-		return nil, errors.New("wrap: no active keys")
+	if keys == nil {
+		return nil, errors.New("wrap: key store unavailable")
 	}
 	inner, err := (&pionudp.ListenConfig{
 		ReadBufferSize:  8 << 20,

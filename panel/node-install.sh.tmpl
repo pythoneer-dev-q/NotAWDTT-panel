@@ -57,7 +57,8 @@ install -d -m 700 /etc/wdtt-node
 install -d -m 755 /usr/local/libexec
 tmp_bin=$(mktemp)
 tmp_cli=$(mktemp)
-trap 'rm -f -- "$tmp_bin" "$tmp_cli"' EXIT
+tmp_mtu=$(mktemp)
+trap 'rm -f -- "$tmp_bin" "$tmp_cli" "$tmp_mtu"' EXIT
 case "$(uname -m)" in
     x86_64) node_arch=amd64 ;;
     aarch64|arm64) node_arch=arm64 ;;
@@ -69,8 +70,18 @@ if [ "$(od -An -tx1 -N4 "$tmp_bin" | tr -d ' \n')" != '7f454c46' ]; then
     exit 1
 fi
 curl "${curl_opts[@]}" -H "Authorization: Bearer $NODE_TOKEN" "$MASTER_URL/node/cli" -o "$tmp_cli"
+if [ "$(head -c 19 "$tmp_cli")" != '#!/usr/bin/env bash' ] || ! bash -n "$tmp_cli"; then
+    echo 'Панель вернула повреждённый CLI ноды.' >&2
+    exit 1
+fi
+curl "${curl_opts[@]}" -H "Authorization: Bearer $NODE_TOKEN" "$MASTER_URL/node/mtu-rules" -o "$tmp_mtu"
+if [ "$(head -c 11 "$tmp_mtu")" != '#!/bin/bash' ] || ! bash -n "$tmp_mtu"; then
+    echo 'Панель вернула повреждённый MTU-скрипт.' >&2
+    exit 1
+fi
 install -m 0755 "$tmp_bin" /usr/local/bin/wdtt-node-app
 install -m 0755 "$tmp_cli" /usr/local/bin/wdtt-node
+install -m 0755 "$tmp_mtu" /usr/local/bin/wdtt-mtu-rules.sh
 
 cat > /etc/wdtt-node/node.conf <<EOF
 MASTER_URL=$MASTER_URL

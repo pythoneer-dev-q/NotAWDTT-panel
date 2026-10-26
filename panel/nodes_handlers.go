@@ -25,7 +25,7 @@ import (
 	"github.com/ildarmaga/wdtt/pkg/paneldb"
 )
 
-//go:embed node-install.sh.tmpl node-cli.sh
+//go:embed node-install.sh.tmpl node-cli.sh node-mtu-rules.sh
 var nodeInstallFiles embed.FS
 
 func randomToken(n int) string {
@@ -478,6 +478,27 @@ func (a *App) handleNodeCLI(w http.ResponseWriter, r *http.Request) {
 	data, err := nodeInstallFiles.ReadFile("node-cli.sh")
 	if err != nil {
 		http.Error(w, "node CLI unavailable", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
+}
+
+func (a *App) handleNodeMTURules(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if _, err := authorizedNode(ctx, r); err != nil {
+		http.Error(w, "node authentication failed", http.StatusForbidden)
+		return
+	}
+	data, err := nodeInstallFiles.ReadFile("node-mtu-rules.sh")
+	if err != nil {
+		http.Error(w, "node MTU rules unavailable", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")

@@ -221,7 +221,7 @@ func (a *App) runSubscriptionServer(ctx context.Context, cfg *PanelConfig) {
 	})
 
 	addr := subListenAddr(cfg)
-	listener, err := net.Listen("tcp", addr)
+	listener, err := net.Listen(panelListenNetwork(addr), addr)
 	if err != nil {
 		log.Printf("subscription listen %s: %v", addr, err)
 		return
@@ -249,7 +249,7 @@ func (a *App) runSubscriptionServer(ctx context.Context, cfg *PanelConfig) {
 	a.subSrv = srv
 	a.subMu.Unlock()
 
-	log.Printf("WDTT Subscription: %s://%s%s", scheme, listener.Addr().String(), path)
+	log.Printf("WDTT Subscription: %s (локально; слушает %s)", localListenerURL(listener, scheme, path), listener.Addr())
 	go func() {
 		<-ctx.Done()
 		shCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

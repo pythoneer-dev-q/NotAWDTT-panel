@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -221,10 +220,12 @@ func killProcess(pid int) error {
 	if !isProcessKillable(pid) {
 		return fmt.Errorf("process %d cannot be terminated", pid)
 	}
-	if _, err := os.Stat(filepath.Join("/proc", strconv.Itoa(pid))); err != nil {
+	p, err := os.FindProcess(pid)
+	if err != nil {
 		return fmt.Errorf("process not found")
 	}
-	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+	// Graceful termination first.
+	if err := p.Signal(os.Interrupt); err != nil {
 		return err
 	}
 	deadline := time.Now().Add(2 * time.Second)
@@ -234,5 +235,5 @@ func killProcess(pid int) error {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return syscall.Kill(pid, syscall.SIGKILL)
+	return p.Kill()
 }

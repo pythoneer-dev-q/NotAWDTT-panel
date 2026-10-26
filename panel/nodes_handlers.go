@@ -351,18 +351,18 @@ func (a *App) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	matchedNode, err := authorizedNode(ctx, r)
 	if err != nil {
-		http.Error(w, "node authentication failed", http.StatusForbidden)
+		jsonError(w, "node authentication failed", http.StatusForbidden)
 		return
 	}
 	m, err := paneldb.GetDefaultMongo()
 	if err != nil {
-		http.Error(w, "db error", 500)
+		jsonError(w, "db error", 500)
 		return
 	}
 
 	store, err := m.LoadStore(ctx)
 	if err != nil {
-		http.Error(w, "db error", 500)
+		jsonError(w, "db error", 500)
 		return
 	}
 
@@ -401,7 +401,7 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	node, err := authorizedNode(ctx, r)
 	if err != nil {
-		http.Error(w, "node authentication failed", http.StatusForbidden)
+		jsonError(w, "node authentication failed", http.StatusForbidden)
 		return
 	}
 
@@ -414,25 +414,25 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		BuildCommit string `json:"build_commit"`
 	}
 	if err := readJSON(r, &req); err != nil {
-		http.Error(w, "bad request", 400)
+		jsonError(w, "bad request", 400)
 		return
 	}
 	if req.OnlineUsers < 0 || req.TrafficUp < 0 || req.TrafficDown < 0 ||
 		(req.CertSHA256 != "" && !certFingerprintPattern.MatchString(req.CertSHA256)) ||
 		!nodeVersionPattern.MatchString(req.Version) ||
 		(req.BuildCommit != "" && !buildCommitPattern.MatchString(req.BuildCommit)) {
-		http.Error(w, "invalid node status", http.StatusBadRequest)
+		jsonError(w, "invalid node status", http.StatusBadRequest)
 		return
 	}
 
 	m, err := paneldb.GetDefaultMongo()
 	if err != nil {
-		http.Error(w, "db error", 500)
+		jsonError(w, "db error", 500)
 		return
 	}
 
 	if err := m.UpdateNodeHeartbeat(ctx, node.ApiKey, req.OnlineUsers, req.TrafficUp, req.TrafficDown, req.CertSHA256, req.Version, req.BuildCommit); err != nil {
-		http.Error(w, err.Error(), 404)
+		jsonError(w, err.Error(), 404)
 		return
 	}
 
@@ -444,7 +444,7 @@ func (a *App) handleNodeBinary(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	if _, err := authorizedNode(ctx, r); err != nil {
-		http.Error(w, "node authentication failed", http.StatusForbidden)
+		jsonError(w, "node authentication failed", http.StatusForbidden)
 		return
 	}
 	arch := r.URL.Query().Get("arch")
@@ -452,7 +452,7 @@ func (a *App) handleNodeBinary(w http.ResponseWriter, r *http.Request) {
 		arch = runtime.GOARCH
 	}
 	if arch != "amd64" && arch != "arm64" {
-		http.Error(w, "unsupported architecture", http.StatusBadRequest)
+		jsonError(w, "unsupported architecture", http.StatusBadRequest)
 		return
 	}
 	if arch != runtime.GOARCH {
@@ -463,7 +463,7 @@ func (a *App) handleNodeBinary(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		http.Error(w, "binary for "+arch+" not available on panel", http.StatusConflict)
+		jsonError(w, "binary for "+arch+" not available on panel", http.StatusConflict)
 		return
 	}
 	candidates := []string{
@@ -480,19 +480,19 @@ func (a *App) handleNodeBinary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.Error(w, "binary not available", http.StatusNotFound)
+	jsonError(w, "binary not available", http.StatusNotFound)
 }
 
 func (a *App) handleNodeCLI(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	if _, err := authorizedNode(ctx, r); err != nil {
-		http.Error(w, "node authentication failed", http.StatusForbidden)
+		jsonError(w, "node authentication failed", http.StatusForbidden)
 		return
 	}
 	data, err := nodeInstallFiles.ReadFile("node-cli.sh")
 	if err != nil {
-		http.Error(w, "node CLI unavailable", http.StatusInternalServerError)
+		jsonError(w, "node CLI unavailable", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
@@ -502,18 +502,18 @@ func (a *App) handleNodeCLI(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleNodeMTURules(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	if _, err := authorizedNode(ctx, r); err != nil {
-		http.Error(w, "node authentication failed", http.StatusForbidden)
+		jsonError(w, "node authentication failed", http.StatusForbidden)
 		return
 	}
 	data, err := nodeInstallFiles.ReadFile("node-mtu-rules.sh")
 	if err != nil {
-		http.Error(w, "node MTU rules unavailable", http.StatusInternalServerError)
+		jsonError(w, "node MTU rules unavailable", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
@@ -524,15 +524,15 @@ func (a *App) handleNodeMTURules(w http.ResponseWriter, r *http.Request) {
 // handleNodeInstallScript — возвращает скрипт подключения для нового VPS
 func (a *App) handleNodeInstallScript(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	if !installerHostPattern.MatchString(r.Host) {
-		http.Error(w, "invalid host", http.StatusBadRequest)
+		jsonError(w, "invalid host", http.StatusBadRequest)
 		return
 	}
 	if !installerPathPattern.MatchString(a.cfg.basePath()) {
-		http.Error(w, "invalid panel base path for node installer", http.StatusBadRequest)
+		jsonError(w, "invalid panel base path for node installer", http.StatusBadRequest)
 		return
 	}
 	nodeID := r.URL.Query().Get("id")
@@ -540,11 +540,11 @@ func (a *App) handleNodeInstallScript(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	node, err := authorizedNode(ctx, r)
 	if err != nil || (nodeID != "" && node.ID != nodeID) {
-		http.Error(w, "invalid or disabled node", http.StatusForbidden)
+		jsonError(w, "invalid or disabled node", http.StatusForbidden)
 		return
 	}
 	if r.TLS == nil && !strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		http.Error(w, "node installation requires HTTPS on the panel", http.StatusBadRequest)
+		jsonError(w, "node installation requires HTTPS on the panel", http.StatusBadRequest)
 		return
 	}
 	masterURL := fmt.Sprintf("https://%s%spanel/api", r.Host, a.cfg.basePath())
@@ -552,18 +552,18 @@ func (a *App) handleNodeInstallScript(w http.ResponseWriter, r *http.Request) {
 	if r.TLS != nil && a.cfg.WebCertFile != "" {
 		certPin, err = panelPublicKeyPin(a.cfg.WebCertFile)
 		if err != nil {
-			http.Error(w, "panel certificate unavailable", http.StatusServiceUnavailable)
+			jsonError(w, "panel certificate unavailable", http.StatusServiceUnavailable)
 			return
 		}
 	}
 	data, err := nodeInstallFiles.ReadFile("node-install.sh.tmpl")
 	if err != nil {
-		http.Error(w, "installer unavailable", 500)
+		jsonError(w, "installer unavailable", 500)
 		return
 	}
 	tmpl, err := texttmpl.New("node-install").Funcs(texttmpl.FuncMap{"quote": shellQuote}).Parse(string(data))
 	if err != nil {
-		http.Error(w, "installer template invalid", 500)
+		jsonError(w, "installer template invalid", 500)
 		return
 	}
 	var script bytes.Buffer
@@ -573,17 +573,17 @@ func (a *App) handleNodeInstallScript(w http.ResponseWriter, r *http.Request) {
 		"DtlsPort": node.DtlsPort, "RawPort": node.RawPort,
 	})
 	if err != nil {
-		http.Error(w, "installer generation failed", 500)
+		jsonError(w, "installer generation failed", 500)
 		return
 	}
 	m, err := paneldb.GetDefaultMongo()
 	if err != nil {
-		http.Error(w, "database unavailable", 503)
+		jsonError(w, "database unavailable", 503)
 		return
 	}
 	node.InstallRequestedAt = time.Now().Unix()
 	if err := m.SaveNode(ctx, node); err != nil {
-		http.Error(w, "database unavailable", 503)
+		jsonError(w, "database unavailable", 503)
 		return
 	}
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")

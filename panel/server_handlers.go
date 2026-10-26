@@ -27,7 +27,7 @@ func (a *App) handleProcessList(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleKillProcess(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	pidStr := strings.TrimPrefix(r.URL.Path, a.cfg.basePath()+"panel/api/server/killProcess/")
@@ -232,11 +232,11 @@ func (a *App) handleCustomGeoList(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleGetDb(w http.ResponseWriter, r *http.Request) {
 	if !panelDBEnabled() {
-		http.Error(w, "database not available", http.StatusNotFound)
+		jsonError(w, "database not available", http.StatusNotFound)
 		return
 	}
 	if _, err := os.Stat(panelDBPath); err != nil {
-		http.Error(w, "database not found", http.StatusNotFound)
+		jsonError(w, "database not found", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -311,6 +311,6 @@ func (a *App) handleServerAPI(w http.ResponseWriter, r *http.Request) {
 	case "importDB":
 		a.handleImportDB(w, r)
 	default:
-		http.NotFound(w, r)
+		jsonError(w, "API endpoint not found", http.StatusNotFound)
 	}
 }

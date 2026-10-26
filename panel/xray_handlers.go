@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -344,13 +343,13 @@ func testOutboundDelay(testOutbound map[string]interface{}, allOutboundsJSON, te
 
 	cmd := exec.Command(bin, "run", "-c", tmpPath)
 	cmd.Env = append(os.Environ(), "XRAY_LOCATION_ASSET="+xrayAssetDir)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	setXraySysProcAttr(cmd)
 	stderrPipe, _ := cmd.StderrPipe()
 	if err := cmd.Start(); err != nil {
 		return map[string]interface{}{"success": false, "error": err.Error()}, nil
 	}
 	defer func() {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = cmd.Process.Kill()
 		cmd.Wait()
 	}()
 

@@ -29,6 +29,40 @@ func panelListenAddr(cfg *PanelConfig) string {
 	return net.JoinHostPort(listen, fmt.Sprintf("%d", port))
 }
 
+// An empty or IPv4 bind address must also accept reverse proxies using 127.0.0.1.
+// Keep an explicit IPv6 bind available for installations that need one.
+func panelListenNetwork(addr string) string {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "tcp"
+	}
+	if host == "" || host == "0.0.0.0" {
+		return "tcp4"
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.To4() != nil {
+			return "tcp4"
+		}
+		return "tcp6"
+	}
+	return "tcp"
+}
+
+func localListenerURL(listener net.Listener, scheme, path string) string {
+	host, port, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		return scheme + "://" + listener.Addr().String() + path
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsUnspecified() {
+		if ip.To4() != nil {
+			host = "127.0.0.1"
+		} else {
+			host = "::1"
+		}
+	}
+	return scheme + "://" + net.JoinHostPort(host, port) + path
+}
+
 func validatePanelTLS(certFile, keyFile string) error {
 	certFile = strings.TrimSpace(certFile)
 	keyFile = strings.TrimSpace(keyFile)
@@ -44,7 +78,7 @@ func validatePanelTLS(certFile, keyFile string) error {
 
 func startPanelServer(cfg *PanelConfig, handler http.Handler) error {
 	addr := panelListenAddr(cfg)
-	listener, err := net.Listen("tcp", addr)
+	listener, err := net.Listen(panelListenNetwork(addr), addr)
 	if err != nil {
 		return err
 	}
@@ -69,11 +103,7 @@ func startPanelServer(cfg *PanelConfig, handler http.Handler) error {
 		}
 	}
 
-	host := listener.Addr().String()
-	if strings.HasPrefix(host, ":") {
-		host = "0.0.0.0" + host
-	}
-	log.Printf("WDTT Panel: %s://%s%s", scheme, host, cfg.basePath())
+	log.Printf("WDTT Panel: %s (локально; слушает %s)", localListenerURL(listener, scheme, cfg.basePath()), listener.Addr())
 	if scheme == "http" && (certFile != "" || keyFile != "") {
 		log.Printf("Проверьте пути к сертификату и перезапустите панель")
 	}

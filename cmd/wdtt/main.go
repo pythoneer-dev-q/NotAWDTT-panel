@@ -31,6 +31,7 @@ func main() {
 	nodeSync := ""
 	nodeToken := ""
 	nodeConfig := ""
+	nodeCertPin := ""
 	filtered := make([]string, 0, len(os.Args))
 	for i := 0; i < len(os.Args); i++ {
 		arg := os.Args[i]
@@ -77,6 +78,8 @@ func main() {
 				nodeSync = parts[1]
 			case "NODE_TOKEN":
 				nodeToken = parts[1]
+			case "NODE_CERT_PIN":
+				nodeCertPin = parts[1]
 			}
 		}
 		if nodeSync == "" || nodeToken == "" {
@@ -86,7 +89,8 @@ func main() {
 
 	if nodeSync != "" && nodeToken != "" {
 		noPanel = true
-		server.StartNodeSyncWorker(context.Background(), nodeSync, nodeToken)
+		server.ConfigureNodeDataDir("/etc/wdtt-node")
+		server.StartNodeSyncWorker(context.Background(), nodeSync, nodeToken, nodeCertPin)
 	} else {
 		if err := panel.BootstrapDB(); err != nil {
 			log.Fatalf("[PANEL] ERROR bootstrap: %v", err)

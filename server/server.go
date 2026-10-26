@@ -69,6 +69,7 @@ const (
 var (
 	wgKeepaliveSec   = keepalive
 	statsIntervalSec = defaultStatsIntervalSec
+	nodeServerReady  atomic.Bool
 )
 
 var (
@@ -536,6 +537,8 @@ func RunManaged() {
 }
 
 func runServerOnce(ctx context.Context, cfg ServerConfig) {
+	nodeServerReady.Store(false)
+	defer nodeServerReady.Store(false)
 	serverStartTime = time.Now()
 	markServerVPNActive(false)
 
@@ -555,8 +558,6 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 		log.Println("[SERVER] Idle mode stopped")
 		return
 	}
-
-
 
 	enableBBR()
 
@@ -682,6 +683,7 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 	log.Printf("   WRAP: password HKDF + RTP AEAD | keys: %d", serverWrapKeys.Count())
 	log.Println("[SERVER] Готов")
 	markServerVPNActive(true)
+	nodeServerReady.Store(true)
 
 	for {
 		dtlsConn, err := listener.Accept()
@@ -760,11 +762,15 @@ func ApplyNodeSyncPasswords(passwords []string) {
 }
 
 // StartNodeSyncWorker запускает фоновую синхронизацию ноды с мастер-панелью
-func StartNodeSyncWorker(ctx context.Context, masterURL, token string) {
+func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin string) {
 	if masterURL == "" || token == "" {
 		return
 	}
 	masterURL = strings.TrimRight(masterURL, "/")
+	if !strings.HasPrefix(masterURL, "https://") {
+		log.Printf("[NODE] Синхронизация требует HTTPS: %s", masterURL)
+		return
+	}
 	if !strings.HasSuffix(masterURL, "/panel/api") {
 		if strings.HasSuffix(masterURL, "/panel") {
 			masterURL += "/api"
@@ -776,17 +782,32 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token string) {
 	}
 	log.Printf("[NODE] Запуск воркера синхронизации с мастером: %s", masterURL)
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client, err := newNodeHTTPClient(certPin)
+	if err != nil {
+		log.Printf("[NODE] Неверный сертификат панели: %v", err)
+		return
+	}
 	var lastUp, lastDown int64
+	baselineSet := false
 
 	syncOnce := func() {
-		syncURL := fmt.Sprintf("%s/node/sync?token=%s", masterURL, token)
-		resp, err := client.Get(syncURL)
+		syncURL := masterURL + "/node/sync"
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, syncURL, nil)
+		if err != nil {
+			log.Printf("[NODE] Ошибка адреса панели: %v", err)
+			return
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := client.Do(req)
 		if err != nil {
 			log.Printf("[NODE] Ошибка синхронизации с мастером: %v", err)
 			return
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("[NODE] Панель отклонила синхронизацию: HTTP %d", resp.StatusCode)
+			return
+		}
 
 		var data struct {
 			Success bool `json:"success"`
@@ -796,9 +817,11 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token string) {
 				RawPort   int      `json:"raw_port"`
 			} `json:"obj"`
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&data); err == nil && data.Success {
-			ApplyNodeSyncPasswords(data.Obj.Passwords)
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil || !data.Success {
+			log.Printf("[NODE] Неверный ответ синхронизации: %v", err)
+			return
 		}
+		ApplyNodeSyncPasswords(data.Obj.Passwords)
 
 		dbMutex.Lock()
 		onlineUsers := countOnlineUsersLocked()
@@ -810,6 +833,10 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token string) {
 			}
 		}
 		dbMutex.Unlock()
+		if !baselineSet {
+			lastUp, lastDown = currentUp, currentDown
+			baselineSet = true
+		}
 
 		upDelta := currentUp - lastUp
 		downDelta := currentDown - lastDown
@@ -819,19 +846,41 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token string) {
 		if downDelta < 0 {
 			downDelta = 0
 		}
-		lastUp = currentUp
-		lastDown = currentDown
-
-		hbURL := fmt.Sprintf("%s/node/heartbeat?token=%s", masterURL, token)
+		hbURL := masterURL + "/node/heartbeat"
 		hbBody, _ := json.Marshal(map[string]interface{}{
 			"online_users": onlineUsers,
 			"traffic_up":   upDelta,
 			"traffic_down": downDelta,
+			"cert_sha256":  localNodeCertSHA256(),
 		})
-		_, _ = client.Post(hbURL, "application/json", bytes.NewReader(hbBody))
+		hbReq, err := http.NewRequestWithContext(ctx, http.MethodPost, hbURL, bytes.NewReader(hbBody))
+		if err != nil {
+			return
+		}
+		hbReq.Header.Set("Authorization", "Bearer "+token)
+		hbReq.Header.Set("Content-Type", "application/json")
+		hbResp, err := client.Do(hbReq)
+		if err != nil {
+			log.Printf("[NODE] Heartbeat не отправлен: %v", err)
+			return
+		}
+		defer hbResp.Body.Close()
+		if hbResp.StatusCode != http.StatusOK {
+			log.Printf("[NODE] Heartbeat отклонён: HTTP %d", hbResp.StatusCode)
+			return
+		}
+		lastUp = currentUp
+		lastDown = currentDown
 	}
 
 	go func() {
+		for !nodeServerReady.Load() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
 		// Первичная синхронизация
 		syncOnce()
 		ticker := time.NewTicker(10 * time.Second)

@@ -1,21 +1,32 @@
 package panel
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
+	"crypto/x509"
+	"embed"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
+	texttmpl "text/template"
 	"time"
 
 	"github.com/ildarmaga/wdtt/pkg/paneldb"
 )
+
+//go:embed node-install.sh.tmpl node-cli.sh
+var nodeInstallFiles embed.FS
 
 func randomToken(n int) string {
 	b := make([]byte, n)
@@ -28,6 +39,8 @@ func localNodeEnabled() bool {
 }
 
 var installerHostPattern = regexp.MustCompile(`^[A-Za-z0-9.:[\]-]+$`)
+var installerPathPattern = regexp.MustCompile(`^/[A-Za-z0-9/_-]*/$`)
+var certFingerprintPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
@@ -66,7 +79,14 @@ func (a *App) handleNodesList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Обновляем статус локальной ноды
-	srvIP := a.serverIP()
+	srvIP := strings.TrimSpace(a.cfg.panelDomain())
+	if srvIP == "" {
+		if host, _, err := net.SplitHostPort(r.Host); err == nil {
+			srvIP = host
+		} else {
+			srvIP = r.Host
+		}
+	}
 	now := time.Now().Unix()
 	for _, n := range nodes {
 		if !n.IsActive {
@@ -82,7 +102,11 @@ func (a *App) handleNodesList(w http.ResponseWriter, r *http.Request) {
 		} else {
 			// Если нода не слала пинг более 60 секунд - помечаем offline
 			if now-n.LastSeenAt > 60 {
-				n.Status = "offline"
+				if n.LastSeenAt == 0 && n.InstallRequestedAt > 0 && now-n.InstallRequestedAt < 600 {
+					n.Status = "installing"
+				} else {
+					n.Status = "offline"
+				}
 			}
 		}
 	}
@@ -90,6 +114,13 @@ func (a *App) handleNodesList(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]interface{}{
 		"nodes":     nodes,
 		"server_ip": srvIP,
+		"cert_pin": func() string {
+			if r.TLS == nil || a.cfg.WebCertFile == "" {
+				return ""
+			}
+			pin, _ := panelPublicKeyPin(a.cfg.WebCertFile)
+			return pin
+		}(),
 	})
 }
 
@@ -125,6 +156,10 @@ func (a *App) handleNodeSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.RawPort <= 0 {
 		req.RawPort = 56003
+	}
+	if req.DtlsPort > 65535 || req.RawPort > 65535 || req.DtlsPort == req.RawPort {
+		jsonError(w, "Порты ноды должны быть разными и находиться в диапазоне 1–65535", 400)
+		return
 	}
 
 	m, err := paneldb.GetDefaultMongo()
@@ -170,6 +205,9 @@ func (a *App) handleNodeSave(w http.ResponseWriter, r *http.Request) {
 
 	// Обновление существующей
 	if !existing.IsLocal {
+		if existing.ApiKey == "" {
+			existing.ApiKey = "key_" + randomToken(16)
+		}
 		existing.Name = req.Name
 		existing.Host = req.Host
 		existing.DtlsPort = req.DtlsPort
@@ -249,38 +287,72 @@ func (a *App) handleNodePing(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func nodeBearerToken(r *http.Request) string {
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+	}
+	return r.URL.Query().Get("token") // legacy nodes
+}
+
+func authorizedNode(ctx context.Context, r *http.Request) (*paneldb.Node, error) {
+	token := nodeBearerToken(r)
+	if token == "" {
+		return nil, fmt.Errorf("missing node API key")
+	}
+	m, err := paneldb.GetDefaultMongo()
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := m.ListNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, node := range nodes {
+		if node.IsLocal || !node.IsActive {
+			continue
+		}
+		if subtle.ConstantTimeCompare([]byte(node.ApiKey), []byte(token)) == 1 {
+			return node, nil
+		}
+	}
+	return nil, fmt.Errorf("invalid or disabled node API key")
+}
+
+func panelPublicKeyPin(certPath string) (string, error) {
+	data, err := os.ReadFile(certPath)
+	if err != nil {
+		return "", err
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return "", fmt.Errorf("certificate PEM missing")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", err
+	}
+	// Public CA certificates use normal trust roots, so routine renewal does
+	// not strand a node on a stale public-key pin.
+	if !bytes.Equal(cert.RawSubject, cert.RawIssuer) ||
+		cert.CheckSignature(cert.SignatureAlgorithm, cert.RawTBSCertificate, cert.Signature) != nil {
+		return "", nil
+	}
+	sum := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+	return "sha256//" + base64.StdEncoding.EncodeToString(sum[:]), nil
+}
+
 // handleNodeSync — endpoint для внешних нод для получения актуального списка паролей и настроек
 func (a *App) handleNodeSync(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	matchedNode, err := authorizedNode(ctx, r)
+	if err != nil {
+		http.Error(w, "node authentication failed", http.StatusForbidden)
 		return
 	}
-
 	m, err := paneldb.GetDefaultMongo()
 	if err != nil {
 		http.Error(w, "db error", 500)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-
-	nodes, err := m.ListNodes(ctx)
-	if err != nil {
-		http.Error(w, "db error", 500)
-		return
-	}
-
-	var matchedNode *paneldb.Node
-	for _, n := range nodes {
-		if n.ApiKey == token && n.IsActive {
-			matchedNode = n
-			break
-		}
-	}
-	if matchedNode == nil {
-		http.Error(w, "invalid or disabled node token", http.StatusForbidden)
 		return
 	}
 
@@ -290,7 +362,10 @@ func (a *App) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	inbound, _ := m.LoadInbound(ctx)
+	inbound, err := m.LoadInbound(ctx)
+	if err != nil || inbound == nil {
+		inbound = &paneldb.Inbound{DNS: "1.1.1.1", MTU: 1280}
+	}
 
 	passwords := make([]string, 0, len(store.Users))
 	for p, u := range store.Users {
@@ -311,19 +386,27 @@ func (a *App) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 
 // handleNodeHeartbeat — endpoint для внешних нод: отчет о здоровье и трафике
 func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	node, err := authorizedNode(ctx, r)
+	if err != nil {
+		http.Error(w, "node authentication failed", http.StatusForbidden)
 		return
 	}
 
 	var req struct {
-		OnlineUsers int   `json:"online_users"`
-		TrafficUp   int64 `json:"traffic_up"`
-		TrafficDown int64 `json:"traffic_down"`
+		OnlineUsers int    `json:"online_users"`
+		TrafficUp   int64  `json:"traffic_up"`
+		TrafficDown int64  `json:"traffic_down"`
+		CertSHA256  string `json:"cert_sha256"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		http.Error(w, "bad request", 400)
+		return
+	}
+	if req.OnlineUsers < 0 || req.TrafficUp < 0 || req.TrafficDown < 0 ||
+		(req.CertSHA256 != "" && !certFingerprintPattern.MatchString(req.CertSHA256)) {
+		http.Error(w, "invalid node status", http.StatusBadRequest)
 		return
 	}
 
@@ -333,10 +416,7 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-
-	if err := m.UpdateNodeHeartbeat(ctx, token, req.OnlineUsers, req.TrafficUp, req.TrafficDown); err != nil {
+	if err := m.UpdateNodeHeartbeat(ctx, node.ApiKey, req.OnlineUsers, req.TrafficUp, req.TrafficDown, req.CertSHA256); err != nil {
 		http.Error(w, err.Error(), 404)
 		return
 	}
@@ -346,11 +426,35 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 // handleNodeBinary — отдаёт скомпилированный бинарник WDTT для подключаемых VPS-нод
 func (a *App) handleNodeBinary(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if _, err := authorizedNode(ctx, r); err != nil {
+		http.Error(w, "node authentication failed", http.StatusForbidden)
+		return
+	}
+	arch := r.URL.Query().Get("arch")
+	if arch == "" {
+		arch = runtime.GOARCH
+	}
+	if arch != "amd64" && arch != "arm64" {
+		http.Error(w, "unsupported architecture", http.StatusBadRequest)
+		return
+	}
+	if arch != runtime.GOARCH {
+		for _, path := range []string{"/etc/wdtt/bin/wdtt-linux-" + arch, "wdtt-linux-" + arch} {
+			if fi, err := os.Stat(path); err == nil && !fi.IsDir() && fi.Size() > 500000 {
+				w.Header().Set("Content-Type", "application/octet-stream")
+				http.ServeFile(w, r, path)
+				return
+			}
+		}
+		http.Error(w, "binary for "+arch+" not available on panel", http.StatusConflict)
+		return
+	}
 	candidates := []string{
 		"/usr/local/bin/wdtt-app",
-		"/usr/local/bin/wdtt",
 		"/etc/wdtt/bin/wdtt",
-		"wdtt-linux-amd64",
+		"wdtt-linux-" + arch,
 		os.Args[0],
 	}
 	for _, p := range candidates {
@@ -364,6 +468,23 @@ func (a *App) handleNodeBinary(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "binary not available", http.StatusNotFound)
 }
 
+func (a *App) handleNodeCLI(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if _, err := authorizedNode(ctx, r); err != nil {
+		http.Error(w, "node authentication failed", http.StatusForbidden)
+		return
+	}
+	data, err := nodeInstallFiles.ReadFile("node-cli.sh")
+	if err != nil {
+		http.Error(w, "node CLI unavailable", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
+}
+
 // handleNodeInstallScript — возвращает скрипт подключения для нового VPS
 func (a *App) handleNodeInstallScript(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -374,86 +495,68 @@ func (a *App) handleNodeInstallScript(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid host", http.StatusBadRequest)
 		return
 	}
-	token := r.URL.Query().Get("token")
-	nodeID := r.URL.Query().Get("id")
-	if token == "" || nodeID == "" {
-		http.Error(w, "missing node credentials", http.StatusBadRequest)
+	if !installerPathPattern.MatchString(a.cfg.basePath()) {
+		http.Error(w, "invalid panel base path for node installer", http.StatusBadRequest)
 		return
 	}
-	m, err := paneldb.GetDefaultMongo()
-	if err != nil {
-		http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+	nodeID := r.URL.Query().Get("id")
+	if nodeID == "" {
+		http.Error(w, "missing node credentials", http.StatusBadRequest)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	node, err := m.GetNode(ctx, nodeID)
-	if err != nil || node == nil || node.IsLocal || !node.IsActive || subtle.ConstantTimeCompare([]byte(node.ApiKey), []byte(token)) != 1 {
+	node, err := authorizedNode(ctx, r)
+	if err != nil || node.ID != nodeID {
 		http.Error(w, "invalid or disabled node", http.StatusForbidden)
 		return
 	}
-	scheme := "http"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "https"
+	if r.TLS == nil && !strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		http.Error(w, "node installation requires HTTPS on the panel", http.StatusBadRequest)
+		return
 	}
-	masterURL := fmt.Sprintf("%s://%s%spanel/api", scheme, r.Host, a.cfg.basePath())
-
-	script := fmt.Sprintf(`#!/usr/bin/env bash
-set -e
-echo "═══════════════════════════════════════════════════════"
-echo "    Подключение VPS-ноды к панели WDTT"
-echo "═══════════════════════════════════════════════════════"
-
-NODE_TOKEN=%s
-NODE_ID=%s
-MASTER_URL=%s
-
-echo "[1/4] Обновление пакетов и установка зависимостей..."
-apt-get update -y && apt-get install -y curl iptables tar ca-certificates
-
-echo "[2/4] Загрузка бинарника WDTT..."
-mkdir -p /etc/wdtt /usr/local/bin
-curl -fsSL "${MASTER_URL}/node/binary" -o /usr/local/bin/wdtt.new
-chmod +x /usr/local/bin/wdtt.new
-mv /usr/local/bin/wdtt.new /usr/local/bin/wdtt
-
-echo "[3/4] Создание конфигурации ноды..."
-cat <<EOF > /etc/wdtt/node.conf
-MASTER_URL=${MASTER_URL}
-NODE_TOKEN=${NODE_TOKEN}
-NODE_ID=${NODE_ID}
-WDTT_DTLS_PORT=%d
-WDTT_RAW_PORT=%d
-EOF
-chmod 600 /etc/wdtt/node.conf
-
-echo "[4/4] Настройка службы wdtt-node..."
-cat <<EOF > /etc/systemd/system/wdtt-node.service
-[Unit]
-Description=WDTT Node Worker
-After=network.target
-
-[Service]
-Type=simple
-EnvironmentFile=/etc/wdtt/node.conf
-ExecStart=/usr/local/bin/wdtt -no-panel -node-config /etc/wdtt/node.conf
-Restart=always
-RestartSec=3
-LimitNOFILE=65535
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable wdtt-node.service
-systemctl restart wdtt-node.service
-
-echo "✓ Нода успешно подключена и запущена!"
-`, shellQuote(token), shellQuote(nodeID), shellQuote(masterURL), node.DtlsPort, node.RawPort)
-
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	masterURL := fmt.Sprintf("https://%s%spanel/api", r.Host, a.cfg.basePath())
+	certPin := ""
+	if r.TLS != nil && a.cfg.WebCertFile != "" {
+		certPin, err = panelPublicKeyPin(a.cfg.WebCertFile)
+		if err != nil {
+			http.Error(w, "panel certificate unavailable", http.StatusServiceUnavailable)
+			return
+		}
+	}
+	data, err := nodeInstallFiles.ReadFile("node-install.sh.tmpl")
+	if err != nil {
+		http.Error(w, "installer unavailable", 500)
+		return
+	}
+	tmpl, err := texttmpl.New("node-install").Funcs(texttmpl.FuncMap{"quote": shellQuote}).Parse(string(data))
+	if err != nil {
+		http.Error(w, "installer template invalid", 500)
+		return
+	}
+	var script bytes.Buffer
+	err = tmpl.Execute(&script, map[string]interface{}{
+		"MasterURL": masterURL, "Token": node.ApiKey, "ID": node.ID,
+		"Name": node.Name, "CertPin": certPin,
+		"DtlsPort": node.DtlsPort, "RawPort": node.RawPort,
+	})
+	if err != nil {
+		http.Error(w, "installer generation failed", 500)
+		return
+	}
+	m, err := paneldb.GetDefaultMongo()
+	if err != nil {
+		http.Error(w, "database unavailable", 503)
+		return
+	}
+	node.InstallRequestedAt = time.Now().Unix()
+	if err := m.SaveNode(ctx, node); err != nil {
+		http.Error(w, "database unavailable", 503)
+		return
+	}
+	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write([]byte(script))
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"wdtt-node-install.sh\"")
+	_, _ = w.Write(script.Bytes())
 }

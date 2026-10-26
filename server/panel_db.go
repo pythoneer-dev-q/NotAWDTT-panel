@@ -16,6 +16,12 @@ import (
 
 var panelDBPath = "/etc/wdtt/panel.db"
 
+// ConfigureNodeDataDir isolates a standalone VPS node from a panel that may
+// have been installed on the same machine previously.
+func ConfigureNodeDataDir(dir string) {
+	panelDBPath = dir + "/panel.db"
+}
+
 // errTrafficFlushFenced — panel.db users_rev ahead of applied (reset/edit in flight).
 var errTrafficFlushFenced = errors.New("traffic flush fenced: panel users_rev ahead")
 
@@ -391,7 +397,6 @@ func loadDatabaseFromDiskSource() (*Database, error) {
 func saveDatabaseDual() error {
 	return saveDB()
 }
-
 
 func panelUsersRevOnDisk() int64 {
 	if !serverPanelDBReady() {

@@ -74,6 +74,7 @@
   <a-layout id="content-layout">
     <a-layout-content>
       <a-spin :spinning="loading" tip="Загрузка нод..." size="large">
+        <a-alert v-if="!securePanel" type="warning" show-icon style="margin-bottom:12px" message="Для подключения VPS-ноды откройте панель по HTTPS"><template slot="description">Настройте сертификат в <a :href="basePath + 'panel/settings'">настройках панели</a>, затем скопируйте команду установки.</template></a-alert>
         <a-row :gutter="[16, 16]">
           <a-col :span="24">
             <a-card hoverable>
@@ -85,7 +86,7 @@
                   </div>
                 </div>
                 <a-space>
-                  <a-button icon="reload" @click="fetchNodes" :loading="loading">Обновить</a-button>
+                  <a-button icon="reload" @click="fetchNodes()" :loading="loading">Обновить</a-button>
                   <a-button type="primary" icon="plus" @click="openAddModal">Добавить ноду</a-button>
                 </a-space>
               </div>
@@ -126,8 +127,8 @@
                 <div class="node-row" :class="{'is-online': row.status === 'online'}" v-for="row in nodes" :key="row.id">
                   <div><div class="node-row-name">[[ row.name ]] <a-tag v-if="row.is_local" color="orange">Панель</a-tag></div><small>[[ row.id ]]</small></div>
                   <div><div class="node-endpoint">[[ row.host || serverIP ]]</div><small>UDP [[ row.dtls_port || 56000 ]] · RAW [[ row.raw_port || 56003 ]]</small></div>
-                  <div><a-tag :color="row.status === 'online' ? 'green' : 'default'">[[ row.status === 'online' ? 'Онлайн' : (row.status === 'disabled' ? 'Выключена' : 'Нет связи') ]]</a-tag><div class="node-traffic">[[ row.online_users || 0 ]] сессий · [[ formatBytes((row.traffic_up || 0) + (row.traffic_down || 0)) ]]</div></div>
-                  <div class="node-actions"><a-button size="small" icon="wifi" @click="pingNode(row)" :loading="row.pinging">DNS</a-button><a-button v-if="!row.is_local" size="small" icon="download" @click="showInstallCmd(row)">Установить</a-button><a-button size="small" icon="edit" @click="openEditModal(row)"></a-button><a-popconfirm v-if="!row.is_local" title="Удалить ноду?" ok-text="Да" cancel-text="Нет" @confirm="deleteNode(row.id)"><a-button size="small" icon="delete"></a-button></a-popconfirm></div>
+                  <div><a-tag :color="row.status === 'online' ? 'green' : (row.status === 'installing' ? 'orange' : 'default')">[[ row.status === 'online' ? 'Онлайн' : (row.status === 'installing' ? 'Подключается' : (row.status === 'disabled' ? 'Выключена' : 'Нет связи')) ]]</a-tag><div class="node-traffic">[[ row.online_users || 0 ]] сессий · [[ formatBytes((row.traffic_up || 0) + (row.traffic_down || 0)) ]]</div><small v-if="row.last_seen_at">Последний ответ: [[ new Date(row.last_seen_at * 1000).toLocaleString('ru-RU') ]]</small><small v-if="row.cert_sha256" :title="row.cert_sha256">DTLS SHA-256: [[ row.cert_sha256.slice(0, 20) ]]…</small></div>
+                  <div class="node-actions"><a-button size="small" icon="wifi" @click="pingNode(row)" :loading="row.pinging">DNS</a-button><a-button v-if="!row.is_local" :disabled="!row.is_active" size="small" icon="download" @click="showInstallCmd(row)">Установить</a-button><a-button size="small" icon="edit" @click="openEditModal(row)"></a-button><a-popconfirm v-if="!row.is_local" title="Удалить ноду?" ok-text="Да" cancel-text="Нет" @confirm="deleteNode(row.id)"><a-button size="small" icon="delete"></a-button></a-popconfirm></div>
                 </div>
               </div>
             </a-card>
@@ -166,9 +167,14 @@
   </a-modal>
 
   <!-- Модалка быстрой команды подключения VPS -->
-  <a-modal v-model="cmdModal.visible" title="Подключение нового VPS сервера" :footer="null" width="650px">
-    <p>Запустите на новом VPS под <code>root</code>. Команда уже привязана к этой ноде — вводить ключ вручную не нужно.</p>
+  <a-modal v-model="cmdModal.visible" title="Подключение VPS-ноды" :footer="null" width="650px">
+    <a-steps size="small" :current="nodeStage" style="margin-bottom:18px"><a-step title="Создана"></a-step><a-step title="Установщик"></a-step><a-step title="Онлайн"></a-step></a-steps>
+    <p>Запустите на VPS под <code>root</code>. Команда содержит ключ этой ноды и проверяет сертификат панели. Вводить ключ вручную не нужно.</p>
     <div class="node-quick-cmd">[[ cmdModal.cmd ]]</div>
+    <a v-if="cmdModal.url" :href="cmdModal.url" download="wdtt-node-install.sh" rel="noreferrer" class="user-conn-open-link">Скачать персональный установщик</a>
+    <a-alert v-if="currentInstallNode && currentInstallNode.status === 'online'" type="success" show-icon message="Нода подключена и отвечает панели" style="margin-bottom:12px"></a-alert>
+    <a-alert v-else type="info" show-icon message="После запуска дождитесь статуса «Онлайн». Если ответа нет, проверьте sudo wdtt-node logs, TUN и облачный firewall для UDP-портов." style="margin-bottom:12px"></a-alert>
+    <p v-if="currentInstallNode && currentInstallNode.cert_sha256" class="text-muted" style="font-size:11px;word-break:break-all">Сертификат DTLS SHA-256: [[ currentInstallNode.cert_sha256 ]]</p>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
       <span class="text-muted">Команда содержит секрет ноды. Храните её как пароль.</span>
       <a-button type="primary" icon="copy" @click="copyCmd">Скопировать команду</a-button>
@@ -187,8 +193,11 @@ new Vue({
   data() {
     return {
       themeSwitcher,
+      securePanel: window.location.protocol === 'https:',
+      basePath,
       loading: false,
       serverIP: '',
+      certPin: '',
       nodes: [],
       columns: [
         { title: 'Сервер / Нода', dataIndex: 'name', scopedSlots: { customRender: 'name' } },
@@ -214,7 +223,10 @@ new Vue({
       cmdModal: {
         visible: false,
         cmd: '',
+        nodeId: '',
+        url: '',
       },
+      nodePoll: null,
     };
   },
   computed: {
@@ -227,22 +239,41 @@ new Vue({
     totalTraffic() {
       return this.nodes.reduce((acc, n) => acc + (n.traffic_up || 0) + (n.traffic_down || 0), 0);
     },
+    currentInstallNode() {
+      return this.nodes.find(n => n.id === this.cmdModal.nodeId) || null;
+    },
+    nodeStage() {
+      if (this.currentInstallNode && this.currentInstallNode.status === 'online') return 2;
+      return this.currentInstallNode && this.currentInstallNode.install_requested_at ? 1 : 0;
+    },
+  },
+  watch: {
+    'cmdModal.visible'(visible) {
+      if (this.nodePoll) clearInterval(this.nodePoll);
+      this.nodePoll = visible ? setInterval(() => this.fetchNodes(true), 10000) : null;
+    },
   },
   mounted() {
     this.fetchNodes();
   },
+  beforeDestroy() {
+    if (this.nodePoll) clearInterval(this.nodePoll);
+  },
   methods: {
-    fetchNodes() {
-      this.loading = true;
+    fetchNodes(silent = false) {
+      if (!silent) this.loading = true;
       HttpUtil.get('/panel/api/nodes').then(res => {
         this.loading = false;
         if (res.success && res.obj) {
           this.serverIP = res.obj.server_ip || '';
+          this.certPin = res.obj.cert_pin || '';
           this.nodes = (res.obj.nodes || []).map(n => ({ ...n, pinging: false, latency: null }));
+        } else if (!silent) {
+          this.$message.error(res.msg || 'Не удалось загрузить ноды');
         }
       }).catch(err => {
         this.loading = false;
-        this.$message.error('Ошибка загрузки нод: ' + err);
+        if (!silent) this.$message.error('Ошибка загрузки нод: ' + err);
       });
     },
     openAddModal() {
@@ -318,9 +349,20 @@ new Vue({
       });
     },
     showInstallCmd(row) {
+      if (!row.api_key) {
+        this.$message.error('У ноды нет API-ключа. Сохраните карточку ноды ещё раз.');
+        return;
+      }
+      if (window.location.protocol !== 'https:') {
+        this.$message.error('Для подключения ноды откройте панель по HTTPS и настройте сертификат панели.');
+        return;
+      }
       const loc = window.location;
-      const url = loc.origin + basePath + 'panel/api/node/install?token=' + encodeURIComponent(row.api_key || '') + '&id=' + encodeURIComponent(row.id);
-      this.cmdModal.cmd = 'bash <(curl -fsSL "' + url + '")';
+      const url = loc.origin + basePath + 'panel/api/node/install?id=' + encodeURIComponent(row.id);
+      const tls = this.certPin ? '-k --pinnedpubkey "' + this.certPin + '" ' : '';
+      this.cmdModal.cmd = "bash -o pipefail -c 'command -v curl >/dev/null || { apt-get update -y && apt-get install -y curl ca-certificates; }; curl -fsSL " + tls + '-H "Authorization: Bearer ' + row.api_key + '" "' + url + '" | bash' + "'";
+      this.cmdModal.url = url + '&token=' + encodeURIComponent(row.api_key);
+      this.cmdModal.nodeId = row.id;
       this.cmdModal.visible = true;
     },
     copyCmd() {

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+conf=/etc/wdtt-node/node.conf
+if [ "$(id -u)" -ne 0 ]; then echo 'Запустите sudo wdtt-node' >&2; exit 1; fi
+if [ ! -f "$conf" ]; then echo "Конфигурация ноды не найдена: $conf" >&2; exit 1; fi
+. "$conf"
+
+case "${1:-}" in
+    status)
+        systemctl status wdtt-node.service --no-pager
+        echo "Панель: $MASTER_URL | Нода: $NODE_ID"
+        echo "UDP: $WDTT_DTLS_PORT | RAW: $WDTT_RAW_PORT"
+        ;;
+    logs|log) journalctl -u wdtt-node.service -f -n 50 ;;
+    restart) systemctl restart wdtt-node.service ;;
+    reinstall|update)
+        curl_opts=(--fail --show-error --silent --location --retry 3)
+        if [ -n "${NODE_CERT_PIN:-}" ]; then curl_opts+=(--insecure --pinnedpubkey "$NODE_CERT_PIN"); fi
+        tmp=$(mktemp)
+        trap 'rm -f -- "$tmp"' EXIT
+        curl "${curl_opts[@]}" -H "Authorization: Bearer $NODE_TOKEN" "$MASTER_URL/node/install?id=$NODE_ID" -o "$tmp"
+        bash "$tmp"
+        ;;
+    uninstall)
+        read -rp 'Введите УДАЛИТЬ для удаления службы и бинарника ноды: ' answer
+        [ "$answer" = 'УДАЛИТЬ' ] || { echo 'Отмена.'; exit 0; }
+        systemctl disable --now wdtt-node.service
+        rm -f -- /etc/systemd/system/wdtt-node.service /usr/local/bin/wdtt-node-app /usr/local/bin/wdtt-node /usr/local/libexec/wdtt-node-firewall
+        systemctl daemon-reload
+        echo 'Служба удалена. Конфигурация и ключ остались в /etc/wdtt-node/node.conf.'
+        ;;
+    ''|help|--help|-h)
+        echo 'wdtt-node status | logs | restart | reinstall | uninstall'
+        ;;
+    *) echo "Неизвестная команда: $1" >&2; exit 2 ;;
+esac

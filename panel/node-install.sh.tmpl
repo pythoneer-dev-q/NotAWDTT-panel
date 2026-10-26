@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+MASTER_URL={{quote .MasterURL}}
+NODE_TOKEN={{quote .Token}}
+NODE_ID={{quote .ID}}
+NODE_NAME={{quote .Name}}
+NODE_CERT_PIN={{quote .CertPin}}
+DTLS_PORT={{.DtlsPort}}
+RAW_PORT={{.RawPort}}
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo 'Запустите установщик с sudo или от root.' >&2
+    exit 1
+fi
+if [ "${MASTER_URL#https://}" = "$MASTER_URL" ]; then
+    echo 'Панель должна быть доступна по HTTPS.' >&2
+    exit 1
+fi
+if ! command -v apt-get >/dev/null 2>&1; then
+    echo 'Поддерживается VPS на Debian/Ubuntu с apt-get.' >&2
+    exit 1
+fi
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y curl ca-certificates iptables iproute2 kmod openssl
+if [ ! -c /dev/net/tun ]; then
+    modprobe tun 2>/dev/null || true
+fi
+if [ ! -c /dev/net/tun ]; then
+    echo 'На VPS недоступен /dev/net/tun. Включите TUN у провайдера и повторите установку.' >&2
+    exit 1
+fi
+
+curl_opts=(--fail --show-error --silent --location --retry 3 --connect-timeout 10 --max-time 60)
+if [ -n "$NODE_CERT_PIN" ]; then
+    curl_opts+=(--insecure --pinnedpubkey "$NODE_CERT_PIN")
+fi
+echo 'Проверка HTTPS и ключа ноды...'
+curl "${curl_opts[@]}" -H "Authorization: Bearer $NODE_TOKEN" "$MASTER_URL/node/sync" -o /dev/null
+
+install -d -m 700 /etc/wdtt-node
+install -d -m 755 /usr/local/libexec
+tmp_bin=$(mktemp)
+tmp_cli=$(mktemp)
+trap 'rm -f -- "$tmp_bin" "$tmp_cli"' EXIT
+case "$(uname -m)" in
+    x86_64) node_arch=amd64 ;;
+    aarch64|arm64) node_arch=arm64 ;;
+    *) echo 'Архитектура VPS не поддерживается.' >&2; exit 1 ;;
+esac
+curl "${curl_opts[@]}" -H "Authorization: Bearer $NODE_TOKEN" "$MASTER_URL/node/binary?arch=$node_arch" -o "$tmp_bin"
+if [ "$(od -An -tx1 -N4 "$tmp_bin" | tr -d ' \n')" != '7f454c46' ]; then
+    echo 'Панель вернула файл вместо ELF-бинарника.' >&2
+    exit 1
+fi
+curl "${curl_opts[@]}" -H "Authorization: Bearer $NODE_TOKEN" "$MASTER_URL/node/cli" -o "$tmp_cli"
+install -m 0755 "$tmp_bin" /usr/local/bin/wdtt-node-app
+install -m 0755 "$tmp_cli" /usr/local/bin/wdtt-node
+
+cat > /etc/wdtt-node/node.conf <<EOF
+MASTER_URL=$MASTER_URL
+NODE_TOKEN=$NODE_TOKEN
+NODE_ID=$NODE_ID
+NODE_CERT_PIN=$NODE_CERT_PIN
+WDTT_DTLS_PORT=$DTLS_PORT
+WDTT_RAW_PORT=$RAW_PORT
+WDTT_CONFIG_DIR=/etc/wdtt-node
+EOF
+chmod 600 /etc/wdtt-node/node.conf
+
+cat > /usr/local/libexec/wdtt-node-firewall <<'EOF'
+#!/usr/bin/env bash
+set -e
+. /etc/wdtt-node/node.conf
+if command -v ufw >/dev/null 2>&1 && ufw status | grep -q 'Status: active'; then
+    ufw allow "$WDTT_DTLS_PORT/udp" comment 'WDTT node DTLS' >/dev/null
+    ufw allow "$WDTT_RAW_PORT/udp" comment 'WDTT node RAW' >/dev/null
+else
+    iptables -C INPUT -p udp --dport "$WDTT_DTLS_PORT" -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport "$WDTT_DTLS_PORT" -j ACCEPT
+    iptables -C INPUT -p udp --dport "$WDTT_RAW_PORT" -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport "$WDTT_RAW_PORT" -j ACCEPT
+fi
+EOF
+chmod 755 /usr/local/libexec/wdtt-node-firewall
+
+cat > /etc/systemd/system/wdtt-node.service <<'EOF'
+[Unit]
+Description=WDTT VPS Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/etc/wdtt-node
+EnvironmentFile=/etc/wdtt-node/node.conf
+ExecStartPre=/usr/local/libexec/wdtt-node-firewall
+ExecStart=/usr/local/bin/wdtt-node-app -no-panel -node-config /etc/wdtt-node/node.conf -config-dir /etc/wdtt-node
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now wdtt-node.service
+systemctl restart wdtt-node.service
+sleep 3
+if ! systemctl is-active --quiet wdtt-node.service; then
+    journalctl -u wdtt-node.service -n 30 --no-pager >&2
+    exit 1
+fi
+echo "Нода $NODE_NAME запущена. Ожидайте статуса «Онлайн» в панели."
+if [ -f /etc/wdtt-node/dtls-cert.pem ]; then
+    openssl x509 -in /etc/wdtt-node/dtls-cert.pem -noout -fingerprint -sha256 || true
+fi
+echo 'Проверить: sudo wdtt-node status. Откройте UDP-порты и в облачном firewall провайдера.'

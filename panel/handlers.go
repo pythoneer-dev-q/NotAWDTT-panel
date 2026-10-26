@@ -131,7 +131,10 @@ func (a *App) serverIP() string {
 		return strings.TrimSpace(out)
 	}
 	out, _ = runCmd("hostname", "-I")
-	return strings.Fields(out)[0]
+	if fields := strings.Fields(out); len(fields) > 0 {
+		return fields[0]
+	}
+	return "127.0.0.1"
 }
 
 func (a *App) enrichUserSub(u map[string]interface{}, entry *PasswordEntry) {

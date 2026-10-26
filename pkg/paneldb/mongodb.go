@@ -22,20 +22,22 @@ const (
 
 // Node - VPS-нода для мультисерверной генерации и работы
 type Node struct {
-	ID          string `bson:"_id" json:"id"`
-	Name        string `bson:"name" json:"name"`
-	Host        string `bson:"host" json:"host"`
-	DtlsPort    int    `bson:"dtls_port" json:"dtls_port"`
-	RawPort     int    `bson:"raw_port" json:"raw_port"`
-	ApiKey      string `bson:"api_key" json:"api_key"`
-	IsActive    bool   `bson:"is_active" json:"is_active"`
-	IsLocal     bool   `bson:"is_local" json:"is_local"`
-	LastSeenAt  int64  `bson:"last_seen_at" json:"last_seen_at"`
-	Status      string `bson:"status" json:"status"` // "online", "offline"
-	OnlineUsers int    `bson:"online_users" json:"online_users"`
-	TrafficUp   int64  `bson:"traffic_up" json:"traffic_up"`
-	TrafficDown int64  `bson:"traffic_down" json:"traffic_down"`
-	CreatedAt   int64  `bson:"created_at" json:"created_at"`
+	ID                 string `bson:"_id" json:"id"`
+	Name               string `bson:"name" json:"name"`
+	Host               string `bson:"host" json:"host"`
+	DtlsPort           int    `bson:"dtls_port" json:"dtls_port"`
+	RawPort            int    `bson:"raw_port" json:"raw_port"`
+	ApiKey             string `bson:"api_key" json:"api_key"`
+	IsActive           bool   `bson:"is_active" json:"is_active"`
+	IsLocal            bool   `bson:"is_local" json:"is_local"`
+	LastSeenAt         int64  `bson:"last_seen_at" json:"last_seen_at"`
+	InstallRequestedAt int64  `bson:"install_requested_at" json:"install_requested_at"`
+	CertSHA256         string `bson:"cert_sha256" json:"cert_sha256"`
+	Status             string `bson:"status" json:"status"` // "online", "offline"
+	OnlineUsers        int    `bson:"online_users" json:"online_users"`
+	TrafficUp          int64  `bson:"traffic_up" json:"traffic_up"`
+	TrafficDown        int64  `bson:"traffic_down" json:"traffic_down"`
+	CreatedAt          int64  `bson:"created_at" json:"created_at"`
 }
 
 type MongoGlobalDoc struct {
@@ -291,7 +293,7 @@ func (m *MongoDB) DeleteNode(ctx context.Context, id string) error {
 	return err
 }
 
-func (m *MongoDB) UpdateNodeHeartbeat(ctx context.Context, apiKey string, onlineUsers int, upDelta, downDelta int64) error {
+func (m *MongoDB) UpdateNodeHeartbeat(ctx context.Context, apiKey string, onlineUsers int, upDelta, downDelta int64, certSHA256 string) error {
 	coll := m.db.Collection("nodes")
 	now := time.Now().Unix()
 	update := bson.M{
@@ -299,6 +301,7 @@ func (m *MongoDB) UpdateNodeHeartbeat(ctx context.Context, apiKey string, online
 			"last_seen_at": now,
 			"status":       "online",
 			"online_users": onlineUsers,
+			"cert_sha256":  certSHA256,
 		},
 		"$inc": bson.M{
 			"traffic_up":   upDelta,

@@ -500,14 +500,10 @@ func (a *App) handleNodeInstallScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nodeID := r.URL.Query().Get("id")
-	if nodeID == "" {
-		http.Error(w, "missing node credentials", http.StatusBadRequest)
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	node, err := authorizedNode(ctx, r)
-	if err != nil || node.ID != nodeID {
+	if err != nil || (nodeID != "" && node.ID != nodeID) {
 		http.Error(w, "invalid or disabled node", http.StatusForbidden)
 		return
 	}

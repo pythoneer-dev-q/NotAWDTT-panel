@@ -17,6 +17,7 @@ panel/bundled/
 .gocache/
 
 # Secrets
+.env
 *.key
 *.pem
 *.keystore

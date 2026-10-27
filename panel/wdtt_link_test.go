@@ -22,8 +22,8 @@ func TestBuildAllSubscriptionLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(links) < 4 {
-		t.Fatalf("expected at least 4 links, got %d: %v", len(links), links)
+	if len(links) != 7 {
+		t.Fatalf("expected all 7 application formats, got %d: %v", len(links), links)
 	}
 	if len(titles) != len(links) {
 		t.Fatalf("titles %d != links %d", len(titles), len(links))
@@ -46,6 +46,17 @@ func TestBuildAllSubscriptionLinks(t *testing.T) {
 	}
 	if !foundQwdtt {
 		t.Fatalf("missing qwdtt link: %v", links)
+	}
+	for _, expected := range []string{"PWDTT — Desktop", "WDTT — Windows", "qWDTT", "WDTT Windows — qwdtt"} {
+		found := false
+		for _, title := range titles {
+			if title == expected {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("missing application %q", expected)
+		}
 	}
 	for i, title := range titles {
 		if title == "iOS — VK Turn Proxy" && !strings.HasSuffix(links[i], "#TestUser") {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -278,6 +279,7 @@ func (a *App) restListUsers(w http.ResponseWriter, r *http.Request) {
 		filtered = append(filtered, u)
 	}
 
+	sort.Slice(filtered, func(i, j int) bool { return filtered[i].PasswordKey < filtered[j].PasswordKey })
 	total := len(filtered)
 	offset := 0
 	if offsetStr != "" {
@@ -327,6 +329,11 @@ func (a *App) restCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	password := strings.TrimSpace(req.Password)
+	if password == "" {
+		// Remnawave-style clients commonly call the stable user identifier "name".
+		// Keep accepting "password" for backwards compatibility.
+		password = strings.TrimSpace(req.Name)
+	}
 	pw, err := createUser(password, entry)
 	if err != nil {
 		restError(w, http.StatusBadRequest, err.Error())

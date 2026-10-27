@@ -307,7 +307,9 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request) {
 		info.Entry.UpBytes, info.Entry.DownBytes, info.Entry.TotalBytes, expireSec)
 
 	var allLinks []string
-	var linkTitles []string
+	var appLinks []string
+	var appTitles []string
+	wantsHTML := subscriptionWantsHTML(r)
 	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
@@ -332,7 +334,15 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request) {
 				}
 				if nl, err := buildWdttShareLink(h, info.Password, info.Email, nodeTitle, "", info.Entry.VkHash, &nodeEntry, nodeInbound, subURL); err == nil && nl != "" {
 					allLinks = append(allLinks, nl)
-					linkTitles = append(linkTitles, nodeTitle)
+					if wantsHTML {
+						links, titles, err := buildAllSubscriptionLinks(h, info.Password, info.Email, nodeTitle, &nodeEntry, nodeInbound, subURL)
+						if err == nil {
+							appLinks = append(appLinks, links...)
+							for _, title := range titles {
+								appTitles = append(appTitles, nodeTitle+" · "+title)
+							}
+						}
+					}
 				}
 			}
 		}
@@ -347,11 +357,13 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		allLinks = []string{link}
-		linkTitles = []string{"WDTT"}
+		if wantsHTML {
+			appLinks, appTitles, _ = buildAllSubscriptionLinks(linkHost, info.Password, info.Email, a.cfg.SubTitle, info.Entry, inbound, subURL)
+		}
 	}
 
-	if subscriptionWantsHTML(r) {
-		a.serveSubInfoPage(w, r, subID, info, allLinks, linkTitles)
+	if wantsHTML {
+		a.serveSubInfoPage(w, r, subID, info, appLinks, appTitles)
 		return
 	}
 
@@ -431,9 +443,6 @@ func (a *App) serveSubInfoPage(w http.ResponseWriter, r *http.Request, subID str
 		"cur_ver":      panelVersion,
 		"assets_ver":   assetsVer,
 		"sId":          subID,
-		"subUrl":       a.buildSubURL(subID),
-		"subJsonUrl":   "",
-		"subClashUrl":  "",
 		"download":     formatBytes(info.Entry.DownBytes),
 		"upload":       formatBytes(info.Entry.UpBytes),
 		"used":         formatBytes(used),

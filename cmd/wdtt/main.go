@@ -67,6 +67,11 @@ func main() {
 		}
 	}
 	os.Args = filtered
+	if panelOnly {
+		// Keep the panel's local-node decisions consistent with the actual mode,
+		// including installations whose environment file predates this setting.
+		_ = os.Setenv("WDTT_INSTALL_MODE", "panel")
+	}
 	if nodeConfig != "" {
 		data, err := os.ReadFile(nodeConfig)
 		if err != nil {

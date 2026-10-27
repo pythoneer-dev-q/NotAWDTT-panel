@@ -16,19 +16,19 @@ import (
 var wdttInboundPath = "/etc/wdtt/inbound.json"
 
 const (
-	wdttServicePath     = "/etc/systemd/system/wdtt.service"
-	wdttInboundTag      = "wdtt-in"
-	wdttIptComment      = "WDTT_MANAGED"
-	defaultDtlsPort     = 56000
-	defaultWgPort       = 56001
-	defaultClientPort   = 9000
-	defaultClientDNS    = "1.1.1.1"
-	defaultMaxUsers     = 64768
-	defaultWgMTU        = 1280
-	maxUsersSubnetLimit = 64768
+	wdttServicePath         = "/etc/systemd/system/wdtt.service"
+	wdttInboundTag          = "wdtt-in"
+	wdttIptComment          = "WDTT_MANAGED"
+	defaultDtlsPort         = 56000
+	defaultWgPort           = 56001
+	defaultClientPort       = 9000
+	defaultClientDNS        = "1.1.1.1"
+	defaultMaxUsers         = 64768
+	defaultWgMTU            = 1280
+	maxUsersSubnetLimit     = 64768
 	defaultOnlineTimeoutSec = 15
-	defaultWgKeepaliveSec    = 25
-	defaultStatsIntervalSec  = 2
+	defaultWgKeepaliveSec   = 25
+	defaultStatsIntervalSec = 2
 )
 
 type WdttInboundConfig struct {
@@ -347,12 +347,12 @@ func saveWdttInbound(cfg WdttInboundConfig) error {
 }
 
 var (
-	reListen            = regexp.MustCompile(`-listen\s+(\S+)`)
-	reWgPort            = regexp.MustCompile(`-wg-port\s+(\d+)`)
-	rePassword          = regexp.MustCompile(`-password\s+(\S+)`)
-	reHandshakeTimeout  = regexp.MustCompile(`-handshake-timeout(?:=|\s+)(\S+)`)
-	reMaxDtlsPerDevice  = regexp.MustCompile(`-max-dtls-per-device(?:=|\s+)(\d+)`)
-	reAdminAddr         = regexp.MustCompile(`-admin-addr(?:=|\s+)(\S+)`)
+	reListen           = regexp.MustCompile(`-listen\s+(\S+)`)
+	reWgPort           = regexp.MustCompile(`-wg-port\s+(\d+)`)
+	rePassword         = regexp.MustCompile(`-password\s+(\S+)`)
+	reHandshakeTimeout = regexp.MustCompile(`-handshake-timeout(?:=|\s+)(\S+)`)
+	reMaxDtlsPerDevice = regexp.MustCompile(`-max-dtls-per-device(?:=|\s+)(\d+)`)
+	reAdminAddr        = regexp.MustCompile(`-admin-addr(?:=|\s+)(\S+)`)
 )
 
 func parseWdttInboundFromService() (WdttInboundConfig, error) {
@@ -545,6 +545,9 @@ func applyWdttInbound(cfg WdttInboundConfig) (restarted bool, err error) {
 	}
 	if err := saveWdttInbound(cfg); err != nil {
 		return false, err
+	}
+	if !localNodeEnabled() {
+		return false, nil
 	}
 	if err := writeWdttServiceFile(cfg); err != nil {
 		return false, err

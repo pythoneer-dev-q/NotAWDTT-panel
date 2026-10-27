@@ -10,17 +10,17 @@ import (
 )
 
 const (
-	acmeCronScriptPath   = "/usr/local/bin/wdtt-acme-cron.sh"
-	acmeCronFilePath     = "/etc/cron.d/wdtt-acme"
-	acmeCronLogPath      = "/var/log/wdtt-acme-cron.log"
-	acmeCronDefaultHour  = 3
+	acmeCronScriptPath    = "/usr/local/bin/wdtt-acme-cron.sh"
+	acmeCronFilePath      = "/etc/cron.d/wdtt-acme"
+	acmeCronLogPath       = "/var/log/wdtt-acme-cron.log"
+	acmeCronDefaultHour   = 3
 	acmeCronDefaultMinute = 12
 )
 
 var acmeCronLineRe = regexp.MustCompile(`(?m)^(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+\*\s+\S+\s+.*wdtt-acme-cron\.sh`)
 
 func acmeCronScript() string {
-	return `#!/bin/bash
+	script := `#!/bin/bash
 set -euo pipefail
 export HOME=/root
 ACME="/root/.acme.sh/acme.sh"
@@ -74,6 +74,11 @@ renew_dtls_if_needed() {
 }
 renew_dtls_if_needed
 `
+	if !localNodeEnabled() {
+		// A panel-only installation has no local DTLS daemon to renew.
+		script = strings.Replace(script, "\nrenew_dtls_if_needed\n", "\n# DTLS renewal is handled by remote nodes.\n", 1)
+	}
+	return script
 }
 
 func acmeCronInstalled() bool {

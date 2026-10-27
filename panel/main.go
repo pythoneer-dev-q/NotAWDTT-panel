@@ -49,6 +49,7 @@ func Run() error {
 
 	app := &App{cfg: cfg}
 	app.startSubscriptionServer()
+	startTelegramBot(cfg)
 	base := cfg.basePath()
 	mux := http.NewServeMux()
 
@@ -88,6 +89,7 @@ func Run() error {
 	// API (auth required)
 	api := base + "panel/api/"
 	mux.HandleFunc(api+"status", app.requireAuthCSRF(app.handleStatus))
+	mux.HandleFunc(api+"dashboard-data", app.requireAuthCSRF(app.handleDashboardData))
 	mux.HandleFunc(api+"inbound", app.requireAuthCSRF(app.handleInboundGet))
 	mux.HandleFunc(api+"inbound/save", app.requireAuthCSRF(app.handleInboundSave))
 	mux.HandleFunc(api+"firewall/ports", app.requireAuthCSRF(app.handleFirewallPortsList))

@@ -335,6 +335,7 @@ func createDefaultPanelConfig() (*PanelConfig, error) {
 		Port:               port,
 		WebBasePath:        "/wdtt/",
 		SessionKey:         randomHex(32),
+		ApiKey:             randomHex(24),
 		SessionMaxAge:      60,
 		PageSize:           50,
 		RemarkModel:        "-ieo",

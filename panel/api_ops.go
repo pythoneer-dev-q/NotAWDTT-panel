@@ -20,6 +20,9 @@ func xrayVersionTagList() ([]string, error) {
 }
 
 func controlService(name, action string) error {
+	if name == "wdtt" && !localNodeEnabled() {
+		return fmt.Errorf("локальная VPN-нода отключена в режиме только панели")
+	}
 	svcMap := map[string]string{"wdtt": wdttServiceUnit, "xray": xrayServiceUnit}
 	svc, ok := svcMap[name]
 	if !ok {

@@ -39,6 +39,24 @@
   .index-page .resource-chart { margin-top:14px; border:1px solid #30352e; border-radius:17px; background:#20231f; padding:18px 20px 12px; }
   .index-page .resource-chart-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
   .index-page .resource-chart h2 { margin:0; font-size:15px; }
+  .index-page .data-section { margin:16px 0; padding:20px; border:1px solid var(--wdtt-border, #30352e); border-radius:16px; background:var(--wdtt-surface, #20231f); scroll-margin-top:16px; }
+  .index-page .data-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:16px; }
+  .index-page .data-header h2 { font-size:18px; margin:0; }
+  .index-page .data-header p { margin:4px 0 0; opacity:.65; font-size:12px; }
+  .index-page .data-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+  .index-page .data-stat { padding:14px; border:1px solid var(--wdtt-border, #30352e); border-radius:12px; min-width:0; }
+  .index-page .data-stat span { display:block; opacity:.65; font-size:12px; }
+  .index-page .data-stat strong { display:block; font-size:24px; margin-top:4px; }
+  .index-page .data-nodes { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px; margin-top:14px; }
+  .index-page .data-node { border:1px solid var(--wdtt-border, #30352e); border-radius:12px; padding:14px; min-width:0; }
+  .index-page .data-node-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .index-page .data-node-head strong { overflow-wrap:anywhere; }
+  .index-page .data-node p { margin:8px 0 0; font-size:12px; opacity:.72; overflow-wrap:anywhere; }
+  body:not(.dark) .index-page { --wdtt-surface:#fff; --wdtt-border:#e7e8e6; }
+  body:not(.dark) .index-page .resource-card, body:not(.dark) .index-page .resource-chart { background:#fff; border-color:#e7e8e6; }
+  body:not(.dark) .index-page .resource-card .resource-label, body:not(.dark) .index-page .resource-card small { color:#69736b; }
+  body:not(.dark) .index-page .resource-card .ant-progress-text { color:#343a35; }
+  @media (max-width:700px) { .index-page .data-section { padding:14px; } .index-page .data-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } }
   @media (max-width:700px) { .index-page .resource-grid { grid-template-columns:1fr; gap:9px; } .index-page .resource-card { min-height:112px; padding:14px; } }
   .index-page .action-card > .ant-card-body {
     display: none;
@@ -154,6 +172,25 @@
                   <div class="resource-card"><div><span class="resource-icon"><a-icon type="cloud-upload" /></span><div class="resource-label">Общий трафик</div><strong>[[ SizeFormatter.sizeFormat(status.netTraffic.sent + status.netTraffic.recv) ]]</strong><small>↑ [[ SizeFormatter.sizeFormat(status.netTraffic.sent) ]] · ↓ [[ SizeFormatter.sizeFormat(status.netTraffic.recv) ]]</small></div></div>
                 </div>
                 <div class="resource-chart"><div class="resource-chart-head"><h2>Нагрузка CPU</h2><a-button size="small" type="link" @click="openCpuHistory">История</a-button></div><sparkline :data="cpuHistory" :vb-width="840" :height="90" :stroke="accentColor" :stroke-width="2.2" :fill-opacity="0.14" :show-grid="false" :show-axes="false" :show-tooltip="false"></sparkline></div>
+                <section id="data" class="data-section">
+                  <div class="data-header"><div><h2>Данные</h2><p>Пользователи, устройства и состояние кластера</p></div><a-button size="small" icon="reload" @click="getDashboardData">Обновить</a-button></div>
+                  <a-alert v-if="dashboardDataError" type="warning" :message="dashboardDataError" show-icon style="margin-bottom:12px"></a-alert>
+                  <div class="data-stats">
+                    <div class="data-stat"><span>Пользователи</span><strong>[[ dashboardData.users ]]</strong></div>
+                    <div class="data-stat"><span>Сейчас онлайн</span><strong>[[ dashboardData.online ]]</strong></div>
+                    <div class="data-stat"><span>Привязано устройств</span><strong>[[ dashboardData.devices ]]</strong></div>
+                    <div class="data-stat"><span>Ноды онлайн</span><strong>[[ dashboardData.nodes_available ? dashboardData.nodes.filter(n => n.online).length + ' / ' + dashboardData.nodes.length : '—' ]]</strong></div>
+                  </div>
+                  <div v-if="dashboardData.nodes.length" class="data-nodes">
+                    <div v-for="node in dashboardData.nodes" :key="node.id" class="data-node">
+                      <div class="data-node-head"><strong>[[ node.name || node.host || node.id ]]</strong><a-tag :color="node.online ? 'green' : 'default'">[[ node.online ? 'Онлайн' : (node.enabled ? 'Офлайн' : 'Выключена') ]]</a-tag></div>
+                      <p>[[ node.host ]]</p><p>Онлайн пользователей: <b>[[ node.online ? node.users : '—' ]]</b></p>
+                      <p>Трафик: ↓ [[ SizeFormatter.sizeFormat(node.down) ]] · ↑ [[ SizeFormatter.sizeFormat(node.up) ]]</p>
+                      <p>CPU и RAM ноды не передаются</p>
+                    </div>
+                  </div>
+                  <p v-else style="margin:14px 0 0;opacity:.65">[[ dashboardData.nodes_available ? 'Ноды ещё не добавлены' : 'Нет данных о нодах' ]]</p>
+                </section>
               </a-col>
               <a-col :xs="24" :sm="24" :lg="12">
                 <a-card hoverable class="wdtt-card">
@@ -1045,6 +1082,9 @@
         spinning: false
       },
       status: new Status(),
+      dashboardData: { users: '—', online: '—', devices: '—', nodes: [], nodes_available: false },
+      dashboardDataError: '',
+      dashboardDataLoading: false,
   cpuHistory: [], // small live widget history
   cpuHistoryLong: [], // aggregated points from backend
   cpuHistoryLabels: [],
@@ -1100,6 +1140,20 @@
           }
         } catch (e) {
           console.error("Failed to get status:", e);
+        }
+      },
+      async getDashboardData() {
+        if (this.dashboardDataLoading) return;
+        this.dashboardDataLoading = true;
+        try {
+          const msg = await HttpUtil.get('/panel/api/dashboard-data');
+          if (!msg || !msg.success) throw new Error((msg && msg.msg) || 'Нет ответа панели');
+          this.dashboardData = msg.obj;
+          this.dashboardDataError = '';
+        } catch (e) {
+          this.dashboardDataError = 'Не удалось обновить данные. Проверьте подключение к панели.';
+        } finally {
+          this.dashboardDataLoading = false;
         }
       },
       setStatus(data) {
@@ -1566,6 +1620,10 @@
 
       const settingsPromise = HttpUtil.get('/panel/setting/defaultSettings');
       await this.getStatus();
+      await this.getDashboardData();
+      this.dashboardDataTimer = setInterval(() => {
+        if (PagePollUtil.isVisible()) this.getDashboardData();
+      }, 15000);
       const msg = await settingsPromise;
       if (msg.success) {
         this.ipLimitEnable = msg.obj.ipLimitEnable;

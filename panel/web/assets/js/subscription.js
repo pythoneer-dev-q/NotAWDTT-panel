@@ -4,12 +4,26 @@
   if (!el) return;
   const textarea = document.getElementById('subscription-links');
   const titlesEl = document.getElementById('subscription-link-titles');
-  const rawLinks = (textarea?.value || '').split('\n').filter(Boolean);
+  const currentSubUrl = window.location.href;
+  const rawLinks = (textarea?.value || '').split('\n').filter(Boolean).map(link => {
+    if (!link.startsWith('wdtt://eyJ')) return link;
+    try {
+      const payload = decodeWdttPayload(link);
+      if (!payload.sub) return link;
+      payload.sub = currentSubUrl;
+      const bytes = new TextEncoder().encode(JSON.stringify(payload));
+      let binary = '';
+      bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+      return 'wdtt://' + btoa(binary);
+    } catch (e) {
+      return link;
+    }
+  });
   const rawTitles = (titlesEl?.value || '').split('\n').filter(Boolean);
 
   const data = {
     sId: el.getAttribute('data-sid') || '',
-    subUrl: el.getAttribute('data-sub-url') || '',
+    subUrl: currentSubUrl,
     subJsonUrl: el.getAttribute('data-subjson-url') || '',
     subClashUrl: el.getAttribute('data-subclash-url') || '',
     download: el.getAttribute('data-download') || '',

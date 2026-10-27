@@ -274,6 +274,10 @@ func applyWdttConfigChangeHotOnly() error {
 }
 
 func applyWdttConfigChangeMaybeRestart(restartOnFail bool) error {
+	if !localNodeEnabled() {
+		// Remote nodes receive changes through their regular synchronization.
+		return nil
+	}
 	reloadErr := wdttHotReload()
 	if reloadErr == nil {
 		return nil
@@ -289,6 +293,7 @@ func applyWdttConfigChangeMaybeRestart(restartOnFail bool) error {
 			return nil
 		} else {
 			log.Printf("[panel] in-process restart не удался: %v", restartErr)
+			return fmt.Errorf("VPN restart failed: %w", restartErr)
 		}
 	}
 	if _, err := exec.LookPath("systemctl"); err != nil {

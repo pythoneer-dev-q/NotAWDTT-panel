@@ -36,3 +36,17 @@ body.dark .ant-progress-circle-path { stroke:var(--wdtt-accent); }
 body.dark .ant-input:focus, body.dark .ant-select-focused .ant-select-selection { border-color:var(--wdtt-accent); box-shadow:0 0 0 2px var(--wdtt-accent-soft); }
 #app:not(.login-app):not(.subscription-page) .ant-card { border-radius:var(--wdtt-radius); }
 @media (max-width:768px) { body.dark #app:not(.login-app):not(.subscription-page) .ant-card-body { padding:12px; } #app:not(.login-app):not(.subscription-page) .ant-table-thead > tr > th, #app:not(.login-app):not(.subscription-page) .ant-table-tbody > tr > td { padding:8px; } }
+
+/* Shared layout rhythm across the console, without changing login/subscription pages. */
+#app:not(.login-app):not(.subscription-page) #content-layout { min-width:0; }
+#app:not(.login-app):not(.subscription-page) #content-layout > .ant-layout-content { min-width:0; padding:24px; }
+#app:not(.login-app):not(.subscription-page) .ant-card { overflow:hidden; }
+#app:not(.login-app):not(.subscription-page) .ant-card-head { padding-left:18px; padding-right:18px; }
+#app:not(.login-app):not(.subscription-page) .ant-card-actions { display:flex; align-items:stretch; }
+#app:not(.login-app):not(.subscription-page) .ant-card-actions > li { min-width:0; }
+#app:not(.login-app):not(.subscription-page) .ant-table-wrapper { max-width:100%; }
+#app:not(.login-app):not(.subscription-page) .ant-table-content { overflow-x:auto; }
+@media (max-width:768px) {
+  #app:not(.login-app):not(.subscription-page) #content-layout > .ant-layout-content { padding:14px; }
+  #app:not(.login-app):not(.subscription-page) .ant-card-head { padding-left:14px; padding-right:14px; }
+}

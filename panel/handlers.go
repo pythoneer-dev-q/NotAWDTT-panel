@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ildarmaga/wdtt/pkg/paneldb"
 	"github.com/ildarmaga/wdtt/pkg/vkhash"
@@ -85,6 +86,69 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "msg": msg})
 }
 
+func dashboardDeviceCount(db *PasswordsDB) int {
+	if db == nil {
+		return 0
+	}
+	ids := make(map[string]struct{})
+	for id := range db.Devices {
+		if id = strings.TrimSpace(id); id != "" {
+			ids[id] = struct{}{}
+		}
+	}
+	for _, entry := range db.Passwords {
+		if entry == nil {
+			continue
+		}
+		for _, id := range append(append([]string(nil), entry.DeviceIDs...), entry.DeviceID) {
+			if id = strings.TrimSpace(id); id != "" {
+				ids[id] = struct{}{}
+			}
+		}
+	}
+	return len(ids)
+}
+
+// handleDashboardData returns only the fields needed by the dashboard; node
+// API keys and certificates must never be included in this response.
+func (a *App) handleDashboardData(w http.ResponseWriter, r *http.Request) {
+	db, err := loadPasswords()
+	if err != nil || db == nil {
+		jsonError(w, "Не удалось загрузить пользователей", http.StatusServiceUnavailable)
+		return
+	}
+	stats := loadServerStats()
+	online := 0
+	for pass, entry := range db.Passwords {
+		if entry != nil && userOnline(pass, deviceIDsDisplay(entry), pass == db.MainPassword, stats, entry.NodeOnlineAt) {
+			online++
+		}
+	}
+	nodes := make([]map[string]interface{}, 0)
+	nodesAvailable := false
+	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+		if list, err := m.ListNodes(r.Context()); err == nil {
+			nodesAvailable = true
+			now := time.Now().Unix()
+			for _, n := range list {
+				if n == nil || (n.IsLocal && !localNodeEnabled()) {
+					continue
+				}
+				active := n.IsActive && ((n.IsLocal && serviceActive(wdttServiceUnit)) || (!n.IsLocal && n.LastSeenAt > 0 && now-n.LastSeenAt <= 60))
+				nodes = append(nodes, map[string]interface{}{
+					"id": n.ID, "name": n.Name, "host": n.Host, "online": active,
+					"enabled": n.IsActive, "users": n.OnlineUsers, "last_seen": n.LastSeenAt,
+					"up": n.TrafficUp, "down": n.TrafficDown,
+				})
+			}
+		}
+	}
+	jsonOK(w, map[string]interface{}{
+		"devices": dashboardDeviceCount(db), "users": len(db.Passwords), "online": online,
+		"nodes": nodes, "nodes_available": nodesAvailable,
+	})
+}
+
 func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
 	stats := loadServerStats()
 	db, _ := loadPasswords()
@@ -119,7 +183,7 @@ func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"xray_binary":       xrayBinary(),
 		"stats":             stats,
 		"users_count":       len(db.Passwords),
-		"devices_count":     len(db.Devices),
+		"devices_count":     dashboardDeviceCount(db),
 		"server_ip":         a.serverIP(),
 		"default_link_host": a.defaultLinkHost(),
 		"panel_tls":         panelTLSEnabled(a.cfg),
@@ -362,6 +426,7 @@ func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
 }
 
 type userAPIReq struct {
+	Name           string    `json:"name"`
 	Password       string    `json:"password"`
 	DeviceID       string    `json:"device_id"`
 	DeviceIDs      *[]string `json:"device_ids"`

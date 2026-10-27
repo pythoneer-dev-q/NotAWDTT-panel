@@ -53,7 +53,6 @@ func buildWdttShareLink(serverIP, password, remark, vpnTitle, deviceID, vkHash s
 	})
 }
 
-
 // buildAllSubscriptionLinks — все форматы из вкладки «Подключения» профиля.
 func buildAllSubscriptionLinks(linkHost, password, remark, vpnTitle string, entry *PasswordEntry, inbound WdttInboundConfig, subURL string) (links, titles []string, err error) {
 	vkHash := ""
@@ -105,17 +104,15 @@ func buildAllSubscriptionLinks(linkHost, password, remark, vpnTitle string, entr
 		{"qWDTT", sharelink.BuildQwdttLink(sharelink.QwdttLinkParams{
 			Host: host, Password: password, Name: name, VkHash: vkHash, Port: client,
 		})},
+		{"WDTT Windows — qwdtt", sharelink.BuildQwdttLink(sharelink.QwdttLinkParams{
+			Host: host, Password: password, Name: name, VkHash: vkHash, Port: client,
+		})},
 	}
-	seen := make(map[string]struct{})
 	for _, c := range candidates {
 		link := strings.TrimSpace(c.link)
 		if link == "" {
 			continue
 		}
-		if _, ok := seen[link]; ok {
-			continue
-		}
-		seen[link] = struct{}{}
 		links = append(links, link)
 		titles = append(titles, c.title)
 	}

@@ -597,7 +597,9 @@ func runServerOnce(ctx context.Context, cfg ServerConfig) {
 	go userPresenceLoop(ctx)
 	go getconfFailJanitor(ctx)
 	go relayFailJanitor(ctx)
-	go botLoop(cfg.BotToken, cfg.AdminID, nil)
+	// Telegram management is owned by the panel and talks to its REST API.
+	// Starting the legacy local-DB bot here would make two consumers poll the
+	// same token and would hide users and traffic from external nodes.
 	startAdminServer(ctx, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", cfg.Listen)

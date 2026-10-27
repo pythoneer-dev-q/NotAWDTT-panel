@@ -1,5 +1,6 @@
 package server
 
+import "github.com/ildarmaga/wdtt/pkg/paneldb"
 
 func migrateDatabaseDevices() {
 	for _, entry := range db.Passwords {
@@ -56,7 +57,16 @@ func entryIsMainPassword(entry *PasswordEntry) bool {
 }
 
 func entryMaxDevices(entry *PasswordEntry) int {
-	return 999999 // Лимит устройств вырезан
+	if entryIsMainPassword(entry) {
+		return 999999
+	}
+	if entry == nil || entry.MaxDevices < 1 {
+		return paneldb.DefaultMaxDevices
+	}
+	if entry.MaxDevices > paneldb.MaxDevicesLimit {
+		return paneldb.MaxDevicesLimit
+	}
+	return entry.MaxDevices
 }
 
 func entryHasDevice(entry *PasswordEntry, deviceID string) bool {
@@ -73,11 +83,15 @@ func entryHasDevice(entry *PasswordEntry, deviceID string) bool {
 }
 
 func entryDeviceSlotsLeft(entry *PasswordEntry) int {
-	return 999999 // Безлимитное количество устройств
+	left := entryMaxDevices(entry) - len(allEntryDeviceIDs(entry))
+	if left < 0 {
+		return 0
+	}
+	return left
 }
 
 func entryCanAcceptDevice(entry *PasswordEntry, deviceID string) bool {
-	return true // Лимиты устройств вырезаны: подключение любого количества устройств
+	return entryHasDevice(entry, deviceID) || entryDeviceSlotsLeft(entry) > 0
 }
 
 func bindDeviceToEntry(entry *PasswordEntry, deviceID string) bool {
@@ -87,6 +101,9 @@ func bindDeviceToEntry(entry *PasswordEntry, deviceID string) bool {
 	normalizeEntryDevices(entry)
 	if entryHasDevice(entry, deviceID) {
 		return true
+	}
+	if !entryCanAcceptDevice(entry, deviceID) {
+		return false
 	}
 	unbindDeviceFromOtherEntries(deviceID, entry)
 	entry.DeviceIDs = append(entry.DeviceIDs, deviceID)

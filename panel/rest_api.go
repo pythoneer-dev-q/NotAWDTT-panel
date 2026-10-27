@@ -313,6 +313,10 @@ func (a *App) restCreateUser(w http.ResponseWriter, r *http.Request) {
 		restError(w, http.StatusBadRequest, "invalid json payload: "+err.Error())
 		return
 	}
+	if err := validateUserLimits(req.TotalGB, req.MaxDownMBps, req.MaxUpMBps); err != nil {
+		restError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	entry := passwordEntryFromReq(req)
 	// Default: if total_gb is 0 -> 0 bytes (unlimited)
@@ -396,7 +400,8 @@ func (a *App) handleRestUserItem(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			active := true
-			req := userAPIReq{Active: &active}
+			req := userUpdateReqFromEntry(db.Passwords[actualPass])
+			req.Active = &active
 			if err := updateUser(actualPass, actualPass, req, false); err != nil {
 				restError(w, http.StatusInternalServerError, "failed to activate: "+err.Error())
 				return
@@ -414,7 +419,8 @@ func (a *App) handleRestUserItem(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			active := false
-			req := userAPIReq{Active: &active}
+			req := userUpdateReqFromEntry(db.Passwords[actualPass])
+			req.Active = &active
 			if err := updateUser(actualPass, actualPass, req, false); err != nil {
 				restError(w, http.StatusInternalServerError, "failed to block: "+err.Error())
 				return
@@ -452,7 +458,7 @@ func (a *App) handleRestUserItem(w http.ResponseWriter, r *http.Request) {
 				})
 
 			case http.MethodPut, http.MethodPatch:
-				var updateReq userAPIReq
+				updateReq := userUpdateReqFromEntry(db.Passwords[actualPass])
 				if err := readJSON(r, &updateReq); err != nil {
 					restError(w, http.StatusBadRequest, "invalid json payload: "+err.Error())
 					return

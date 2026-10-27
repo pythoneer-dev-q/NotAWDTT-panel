@@ -20,14 +20,15 @@
         <a-form-item v-if="userModal.isMain || userModal.isEdit">
           <template slot="label">Привязанные устройства</template>
           <div v-if="!userForm.device_ids.length" class="text-muted" style="font-size:12px">
-            Нет привязанных устройств. Подключаются автоматически (без ограничений).
+            Нет привязанных устройств. Первое устройство привяжется автоматически.
           </div>
           <div v-if="userForm.device_ids.length">
             <a-tag v-for="(devId, idx) in userForm.device_ids" :key="devId" closable @close="removeDevice(idx)" style="margin-bottom:6px">
               [[ devId.length > 12 ? devId.slice(0, 8) + '…' : devId ]]
             </a-tag>
             <div class="text-muted" style="font-size:12px;margin-top:4px">
-              [[ userForm.device_ids.length ]] устр. · без лимита
+              <span v-if="userModal.isMain">[[ userForm.device_ids.length ]] устр. · без лимита</span>
+              <span v-else>[[ userForm.device_ids.length ]] / [[ userForm.max_devices || 1 ]] устр.</span>
             </div>
           </div>
         </a-form-item>
@@ -36,6 +37,9 @@
         </a-form-item>
         <a-form-item v-else label="Комментарий">
           <a-input v-model.trim="userForm.comment" placeholder="Имя, заметка"></a-input>
+        </a-form-item>
+        <a-form-item v-if="!userModal.isMain" label="Лимит устройств">
+          <a-input-number v-model="userForm.max_devices" :min="1" :max="20" :precision="0" style="width:120px"></a-input-number>
         </a-form-item>
         <a-form-item v-if="!userModal.isMain" label="VK_HASH">
           <a-textarea
@@ -50,8 +54,21 @@
             Задано хешей: [[ connVkHashCount ]] · iOS возьмёт первый, остальные клиенты — все
           </div>
         </a-form-item>
-        <a-form-item v-if="!userModal.isMain" label="Тариф и Лимиты">
-          <a-tag color="green">Безлимитный доступ (Без ограничений скорости, трафика и устройств)</a-tag>
+        <a-form-item v-if="!userModal.isMain" label="Лимит трафика, ГБ">
+          <a-input-number v-model="userForm.total_gb" :min="0" :max="1000000" :step="1" :precision="2" style="width:160px"></a-input-number>
+          <span class="text-muted" style="margin-left:10px">0 — без лимита</span>
+        </a-form-item>
+        <a-form-item v-if="!userModal.isMain" label="Срок доступа">
+          <a-switch v-model="userForm.unlimited"></a-switch>
+          <span style="margin-left:8px">Бессрочно</span>
+          <a-date-picker v-if="!userForm.unlimited" v-model="userForm.expiryDate" style="margin-left:12px" format="DD.MM.YYYY"></a-date-picker>
+        </a-form-item>
+        <a-form-item v-if="!userModal.isMain" label="Шейпинг скорости">
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <label>↓ Мбит/с <a-input-number v-model="userForm.max_down_mbit" :min="0" :max="100000" :step="1" :precision="1" style="width:120px"></a-input-number></label>
+            <label>↑ Мбит/с <a-input-number v-model="userForm.max_up_mbit" :min="0" :max="100000" :step="1" :precision="1" style="width:120px"></a-input-number></label>
+          </div>
+          <div class="text-muted" style="font-size:12px">0 — без ограничения скорости в соответствующем направлении</div>
         </a-form-item>
         <a-form-item v-if="userModal.isEdit || userModal.isMain" label="Использовано">
           <a-tag :color="trafficTagColor">[[ formatBytes(trafficUsed) ]] <span v-if="Number(userForm.total_gb) > 0">/ [[ userForm.total_gb ]] GB</span><span v-else>/ ∞</span></a-tag>
@@ -613,6 +630,10 @@
       async saveUser() {
         if (!this.userForm.password) {
           Vue.prototype.$message.error('Укажите пароль');
+          return;
+        }
+        if (!this.userModal.isMain && !this.userForm.unlimited && !this.userForm.expiryDate) {
+          Vue.prototype.$message.error('Укажите дату окончания доступа');
           return;
         }
         this.userModal.saving = true;

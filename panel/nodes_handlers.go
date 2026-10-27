@@ -374,12 +374,16 @@ func (a *App) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 	passwords := make([]string, 0, len(store.Users))
 	users := make([]map[string]interface{}, 0, len(store.Users))
 	for p, u := range store.Users {
-		if u != nil && !u.IsDeactivated {
+		if u != nil && !u.IsDeactivated && (u.ExpiresAt <= 0 || u.ExpiresAt > time.Now().Unix()) &&
+			(u.TotalBytes <= 0 || (u.UpBytes < u.TotalBytes && u.DownBytes < u.TotalBytes-u.UpBytes)) {
 			passwords = append(passwords, p)
 			users = append(users, map[string]interface{}{
 				"password":      p,
 				"max_down_mbps": u.MaxDownMBps,
 				"max_up_mbps":   u.MaxUpMBps,
+				"total_bytes":   u.TotalBytes,
+				"expires_at":    u.ExpiresAt,
+				"max_devices":   u.MaxDevices,
 			})
 		}
 	}

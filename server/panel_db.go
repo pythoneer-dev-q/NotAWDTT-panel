@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,16 @@ var panelDBPath = "/etc/wdtt/panel.db"
 // have been installed on the same machine previously.
 func ConfigureNodeDataDir(dir string) {
 	panelDBPath = dir + "/panel.db"
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		log.Printf("[NODE] Не удалось создать каталог данных: %v", err)
+		return
+	}
+	f, err := os.OpenFile(panelDBPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+	if err == nil {
+		_ = f.Close()
+	} else if !os.IsExist(err) {
+		log.Printf("[NODE] Не удалось создать локальную базу: %v", err)
+	}
 }
 
 // errTrafficFlushFenced — panel.db users_rev ahead of applied (reset/edit in flight).
@@ -587,7 +598,8 @@ func loadInboundFromSQLite() (inboundRuntimeSettings, bool, error) {
 				OnlineTimeoutSec:    in.OnlineTimeoutSec,
 				WgKeepaliveSec:      in.WgKeepaliveSec,
 				StatsIntervalSec:    in.StatsIntervalSec,
-				RawEnable:           true,
+				RawEnable:           in.RawEnable,
+				WgEnable:            in.WgEnable,
 			}, true, nil
 		}
 	}
@@ -603,25 +615,7 @@ func loadStartupFromSQLite() (paneldb.StartupSettings, bool, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if in, err := m.LoadInbound(ctx); err == nil && in != nil {
-			return paneldb.StartupSettings{
-				ListenHost:    in.ListenHost,
-				DtlsPort:      in.DtlsPort,
-				WgPort:        in.WgPort,
-				RawDirectPort: in.RawDirectPort,
-				AdminAddr:     in.AdminAddr,
-				Enable:        in.Enable,
-				RuntimeSettings: paneldb.RuntimeSettings{
-					DNS:                 in.DNS,
-					MTU:                 in.MTU,
-					MaxUsers:            in.MaxUsers,
-					HandshakeTimeoutSec: in.HandshakeTimeoutSec,
-					MaxDtlsPerDevice:    in.MaxDtlsPerDevice,
-					OnlineTimeoutSec:    in.OnlineTimeoutSec,
-					WgKeepaliveSec:      in.WgKeepaliveSec,
-					StatsIntervalSec:    in.StatsIntervalSec,
-					RawEnable:           true,
-				},
-			}, true, nil
+			return startupSettingsFromInbound(in), true, nil
 		}
 	}
 	db, err := openServerPanelDB()
@@ -629,6 +623,30 @@ func loadStartupFromSQLite() (paneldb.StartupSettings, bool, error) {
 		return paneldb.StartupSettings{}, false, err
 	}
 	return paneldb.LoadStartupSettings(db)
+}
+
+func startupSettingsFromInbound(in *paneldb.Inbound) paneldb.StartupSettings {
+	return paneldb.StartupSettings{
+		ListenHost:    in.ListenHost,
+		DtlsPort:      in.DtlsPort,
+		WgPort:        in.WgPort,
+		RawDirectPort: in.RawDirectPort,
+		AdminAddr:     in.AdminAddr,
+		Enable:        in.Enable,
+		WgEnable:      in.WgEnable,
+		RuntimeSettings: paneldb.RuntimeSettings{
+			DNS:                 in.DNS,
+			MTU:                 in.MTU,
+			MaxUsers:            in.MaxUsers,
+			HandshakeTimeoutSec: in.HandshakeTimeoutSec,
+			MaxDtlsPerDevice:    in.MaxDtlsPerDevice,
+			OnlineTimeoutSec:    in.OnlineTimeoutSec,
+			WgKeepaliveSec:      in.WgKeepaliveSec,
+			StatsIntervalSec:    in.StatsIntervalSec,
+			RawEnable:           in.RawEnable,
+			WgEnable:            in.WgEnable,
+		},
+	}
 }
 
 func applyInboundRuntimeSettings(raw inboundRuntimeSettings) {

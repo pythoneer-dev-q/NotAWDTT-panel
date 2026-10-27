@@ -28,18 +28,18 @@ type PasswordEntry struct {
 	DeviceID      string   `json:"device_id,omitempty"`
 	DeviceIDs     []string `json:"device_ids,omitempty"`
 	MaxDevices    int      `json:"max_devices,omitempty"`
-	ExpiresAt     int64   `json:"expires_at"`
-	DownBytes     int64   `json:"down_bytes"`
-	UpBytes       int64   `json:"up_bytes"`
-	TotalBytes    int64   `json:"total_bytes,omitempty"`
-	MaxDownMBps   float64 `json:"max_down_mbps,omitempty"`
-	MaxUpMBps     float64 `json:"max_up_mbps,omitempty"`
-	IsDeactivated bool    `json:"is_deactivated,omitempty"`
-	Comment       string  `json:"comment,omitempty"`
-	Ports         string  `json:"ports,omitempty"`
-	VkHash        string  `json:"vk_hash,omitempty"`
-	SubID         string  `json:"sub_id,omitempty"`
-	LastSeenAt    int64   `json:"last_seen_at,omitempty"`
+	ExpiresAt     int64    `json:"expires_at"`
+	DownBytes     int64    `json:"down_bytes"`
+	UpBytes       int64    `json:"up_bytes"`
+	TotalBytes    int64    `json:"total_bytes,omitempty"`
+	MaxDownMBps   float64  `json:"max_down_mbps,omitempty"`
+	MaxUpMBps     float64  `json:"max_up_mbps,omitempty"`
+	IsDeactivated bool     `json:"is_deactivated,omitempty"`
+	Comment       string   `json:"comment,omitempty"`
+	Ports         string   `json:"ports,omitempty"`
+	VkHash        string   `json:"vk_hash,omitempty"`
+	SubID         string   `json:"sub_id,omitempty"`
+	LastSeenAt    int64    `json:"last_seen_at,omitempty"`
 }
 
 const oneGB = 1024 * 1024 * 1024
@@ -66,11 +66,11 @@ func trafficUsed(entry *PasswordEntry) int64 {
 }
 
 func trafficExceeded(entry *PasswordEntry) bool {
-	return false // Все лимиты трафика вырезаны
+	return entry != nil && entry.TotalBytes > 0 && trafficUsed(entry) >= entry.TotalBytes
 }
 
 func isPasswordExpired(entry *PasswordEntry) bool {
-	return false // Все лимиты срока действия вырезаны
+	return entry != nil && entry.ExpiresAt > 0 && time.Now().Unix() >= entry.ExpiresAt
 }
 
 func countActivePasswords(db *PasswordsDB) int {
@@ -454,6 +454,9 @@ func createUser(password string, entry *PasswordEntry) (string, error) {
 	if entry == nil {
 		entry = &PasswordEntry{}
 	}
+	if err := validateUserLimits(bytesToGB(entry.TotalBytes), entry.MaxDownMBps, entry.MaxUpMBps); err != nil {
+		return "", err
+	}
 	normalizeEntryDevices(entry)
 	if password == "" {
 		password = genPassword()
@@ -506,6 +509,9 @@ func addUserPasswords(count int) ([]string, error) {
 }
 
 func updateUser(oldPassword, newPassword string, req userAPIReq, manageDevices bool) error {
+	if err := validateUserLimits(req.TotalGB, req.MaxDownMBps, req.MaxUpMBps); err != nil {
+		return err
+	}
 	if oldPassword == "" {
 		return fmt.Errorf("пароль не указан")
 	}
@@ -517,6 +523,35 @@ func updateUser(oldPassword, newPassword string, req userAPIReq, manageDevices b
 	}
 	if err := serverApplyUserUpdate(oldPassword, newPassword, req, manageDevices); err != nil {
 		return err
+	}
+	return nil
+}
+
+func userUpdateReqFromEntry(entry *PasswordEntry) userAPIReq {
+	if entry == nil {
+		return userAPIReq{}
+	}
+	active := !entry.IsDeactivated
+	return userAPIReq{
+		Comment:     entry.Comment,
+		ExpiresAt:   entry.ExpiresAt,
+		TotalGB:     bytesToGB(entry.TotalBytes),
+		MaxDownMBps: entry.MaxDownMBps,
+		MaxUpMBps:   entry.MaxUpMBps,
+		Active:      &active,
+		MaxDevices:  entry.MaxDevices,
+		Ports:       entry.Ports,
+		VkHash:      entry.VkHash,
+	}
+}
+
+func validateUserLimits(totalGB, downMBps, upMBps float64) error {
+	if math.IsNaN(totalGB) || math.IsInf(totalGB, 0) || totalGB < 0 || totalGB > 1000000 {
+		return fmt.Errorf("лимит трафика должен быть от 0 до 1000000 ГБ")
+	}
+	if math.IsNaN(downMBps) || math.IsInf(downMBps, 0) || downMBps < 0 || downMBps > 12500 ||
+		math.IsNaN(upMBps) || math.IsInf(upMBps, 0) || upMBps < 0 || upMBps > 12500 {
+		return fmt.Errorf("лимит скорости должен быть от 0 до 100000 Мбит/с")
 	}
 	return nil
 }

@@ -3,7 +3,18 @@ package server
 import (
 	"fmt"
 	"testing"
+
+	"github.com/ildarmaga/wdtt/pkg/paneldb"
 )
+
+func TestMongoInboundKeepsWGEnabledForDTLSGetconf(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		startup := startupSettingsFromInbound(&paneldb.Inbound{Enable: true, WgEnable: enabled, RawEnable: true, WgPort: 56001})
+		if startup.WgEnable != enabled || startup.RuntimeSettings.WgEnable != enabled {
+			t.Fatalf("wg_enable=%v was lost while loading MongoDB inbound", enabled)
+		}
+	}
+}
 
 func TestWGModeUsesFlagWithoutPanelDatabase(t *testing.T) {
 	initServerFlags()

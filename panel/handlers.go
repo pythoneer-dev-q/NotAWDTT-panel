@@ -426,6 +426,10 @@ func (a *App) handleUserAdd(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), 400)
 		return
 	}
+	if err := validateUserLimits(req.TotalGB, req.MaxDownMBps, req.MaxUpMBps); err != nil {
+		jsonError(w, err.Error(), 400)
+		return
+	}
 	if req.Password == "" && req.DeviceID == "" && req.Comment == "" && req.ExpiresAt == 0 && req.TotalGB == 0 && req.Active == nil {
 		if req.Count < 1 {
 			req.Count = 1

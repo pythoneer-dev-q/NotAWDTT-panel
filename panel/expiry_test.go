@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -43,6 +44,33 @@ func TestExpiryCalendarDays(t *testing.T) {
 				t.Fatalf("expiryCalendarDays(%v) = %d, want %d", tc.exp, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestUserTrafficLimitStatus(t *testing.T) {
+	entry := &PasswordEntry{TotalBytes: 100, UpBytes: 40, DownBytes: 60}
+	if !trafficExceeded(entry) {
+		t.Fatal("panel did not mark exhausted quota")
+	}
+	entry.TotalBytes = 0
+	if trafficExceeded(entry) {
+		t.Fatal("unlimited user marked as exhausted")
+	}
+}
+
+func TestPartialUserUpdatePreservesSpeedAndQuota(t *testing.T) {
+	req := userUpdateReqFromEntry(&PasswordEntry{TotalBytes: 2 * oneGB, MaxDownMBps: 1.5, MaxUpMBps: 0.25})
+	if err := json.Unmarshal([]byte(`{"active":false}`), &req); err != nil {
+		t.Fatal(err)
+	}
+	if req.TotalGB != 2 || req.MaxDownMBps != 1.5 || req.MaxUpMBps != 0.25 || req.Active == nil || *req.Active {
+		t.Fatalf("partial update lost user limits: %#v", req)
+	}
+	if err := json.Unmarshal([]byte(`{"max_down_mbps":0}`), &req); err != nil {
+		t.Fatal(err)
+	}
+	if req.MaxDownMBps != 0 {
+		t.Fatal("explicit zero did not remove the speed limit")
 	}
 }
 

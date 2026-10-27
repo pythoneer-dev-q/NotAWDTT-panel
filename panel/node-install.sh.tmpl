@@ -70,8 +70,12 @@ if [ "$(od -An -tx1 -N4 "$tmp_bin" | tr -d ' \n')" != '7f454c46' ]; then
     echo 'Панель вернула файл вместо ELF-бинарника.' >&2
     exit 1
 fi
+chmod 700 "$tmp_bin"
 if [ -n "$PANEL_BUILD_COMMIT" ]; then
-    downloaded_commit=$("$tmp_bin" --build-commit 2>/dev/null || true)
+    if ! downloaded_commit=$("$tmp_bin" --build-commit 2>&1); then
+        echo "Не удалось проверить бинарник ноды ($node_arch): $downloaded_commit" >&2
+        exit 1
+    fi
     if [ "$downloaded_commit" != "$PANEL_BUILD_COMMIT" ]; then
         echo "Версия бинарника ноды не совпадает с панелью: ожидалась $PANEL_BUILD_COMMIT, получена ${downloaded_commit:-неизвестная}. Обновите бинарник панели и повторите установку." >&2
         exit 1

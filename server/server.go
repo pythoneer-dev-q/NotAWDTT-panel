@@ -217,11 +217,12 @@ func saveDBLocked() error {
 }
 
 func isPasswordExpired(entry *PasswordEntry) bool {
-	return false // Все лимиты срока действия вырезаны
+	return entry != nil && entry.ExpiresAt > 0 && time.Now().Unix() >= entry.ExpiresAt
 }
 
 func isTrafficExceeded(entry *PasswordEntry) bool {
-	return false // Все лимиты трафика вырезаны
+	return entry != nil && entry.TotalBytes > 0 &&
+		(entry.UpBytes >= entry.TotalBytes || entry.DownBytes >= entry.TotalBytes-entry.UpBytes)
 }
 
 func passwordForDeviceLocked(deviceID string) string {
@@ -723,6 +724,9 @@ type NodeSyncUser struct {
 	Password    string  `json:"password"`
 	MaxDownMBps float64 `json:"max_down_mbps"`
 	MaxUpMBps   float64 `json:"max_up_mbps"`
+	TotalBytes  int64   `json:"total_bytes"`
+	ExpiresAt   int64   `json:"expires_at"`
+	MaxDevices  int     `json:"max_devices"`
 }
 
 // ApplyNodeSyncPasswords keeps compatibility with panels that only send passwords.
@@ -747,6 +751,7 @@ func ApplyNodeSyncUsers(users []NodeSyncUser) {
 		db.Passwords = make(map[string]*PasswordEntry)
 	}
 	existing := make(map[string]bool)
+	changed := false
 	for _, user := range users {
 		p := strings.TrimSpace(user.Password)
 		if p == "" {
@@ -754,24 +759,44 @@ func ApplyNodeSyncUsers(users []NodeSyncUser) {
 		}
 		existing[p] = true
 		if db.Passwords[p] == nil {
+			changed = true
 			db.Passwords[p] = &PasswordEntry{
 				Comment:     "Cluster User",
 				MaxDownMBps: user.MaxDownMBps,
 				MaxUpMBps:   user.MaxUpMBps,
+				TotalBytes:  user.TotalBytes,
+				ExpiresAt:   user.ExpiresAt,
+				MaxDevices:  user.MaxDevices,
 			}
 		} else {
+			entry := db.Passwords[p]
+			if entry.IsDeactivated || entry.MaxDownMBps != user.MaxDownMBps || entry.MaxUpMBps != user.MaxUpMBps ||
+				entry.TotalBytes != user.TotalBytes || entry.ExpiresAt != user.ExpiresAt || entry.MaxDevices != user.MaxDevices {
+				changed = true
+			}
 			db.Passwords[p].IsDeactivated = false
 			db.Passwords[p].MaxDownMBps = user.MaxDownMBps
 			db.Passwords[p].MaxUpMBps = user.MaxUpMBps
+			db.Passwords[p].TotalBytes = user.TotalBytes
+			db.Passwords[p].ExpiresAt = user.ExpiresAt
+			db.Passwords[p].MaxDevices = user.MaxDevices
 		}
 	}
 	for p, entry := range db.Passwords {
 		if !existing[p] && entry != nil {
+			if !entry.IsDeactivated {
+				changed = true
+			}
 			entry.IsDeactivated = true
 		}
 	}
 	_ = refreshWrapKeysFromDBLocked()
 	count := serverWrapKeys.Count()
+	if changed {
+		if err := saveDBLocked(); err != nil {
+			log.Printf("[NODE] Не удалось сохранить локальные пароли: %v", err)
+		}
+	}
 	dbMutex.Unlock()
 	syncAllSpeedLimits()
 	log.Printf("[NODE] Пароли и лимиты синхронизированы с мастером: %d активных ключей", count)

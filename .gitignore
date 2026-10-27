@@ -14,6 +14,7 @@ panel/bundled/
 
 # Go
 *.test
+.gocache/
 
 # Secrets
 *.key

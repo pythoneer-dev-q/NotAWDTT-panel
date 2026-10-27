@@ -1,6 +1,9 @@
 package server
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestMbpsToTcRate(t *testing.T) {
 	cases := []struct {
@@ -67,20 +70,60 @@ func TestNodeSyncRestoresPerUserSpeedLimits(t *testing.T) {
 		dbMutex.Unlock()
 	}()
 
-	ApplyNodeSyncUsers([]NodeSyncUser{{Password: "user-a", MaxDownMBps: 1.5, MaxUpMBps: 0.25}})
+	ApplyNodeSyncUsers([]NodeSyncUser{{Password: "user-a", MaxDownMBps: 1.5, MaxUpMBps: 0.25, TotalBytes: 100, MaxDevices: 3}})
 	dbMutex.Lock()
 	entry := db.Passwords["user-a"]
-	ok := entry != nil && entry.MaxDownMBps == 1.5 && entry.MaxUpMBps == 0.25
+	ok := entry != nil && entry.MaxDownMBps == 1.5 && entry.MaxUpMBps == 0.25 && entry.TotalBytes == 100 && entry.MaxDevices == 3
 	dbMutex.Unlock()
 	if !ok {
 		t.Fatalf("node did not receive limits: %#v", entry)
 	}
-	ApplyNodeSyncUsers([]NodeSyncUser{{Password: "user-a", MaxDownMBps: 0, MaxUpMBps: 2}})
+	ApplyNodeSyncUsers([]NodeSyncUser{{Password: "user-a", MaxDownMBps: 0, MaxUpMBps: 2, TotalBytes: 50, MaxDevices: 2, ExpiresAt: time.Now().Add(time.Hour).Unix()}})
 	dbMutex.Lock()
 	entry = db.Passwords["user-a"]
-	ok = entry != nil && entry.MaxDownMBps == 0 && entry.MaxUpMBps == 2
+	ok = entry != nil && entry.MaxDownMBps == 0 && entry.MaxUpMBps == 2 && entry.TotalBytes == 50 && entry.MaxDevices == 2 && !isPasswordExpired(entry)
 	dbMutex.Unlock()
 	if !ok {
 		t.Fatalf("node did not refresh limits: %#v", entry)
+	}
+}
+
+func TestUserQuotaAndExpiryBlockAuthentication(t *testing.T) {
+	entry := &PasswordEntry{TotalBytes: 100, UpBytes: 40, DownBytes: 59}
+	if isTrafficExceeded(entry) {
+		t.Fatal("user blocked before reaching quota")
+	}
+	entry.DownBytes++
+	if !isTrafficExceeded(entry) {
+		t.Fatal("user with exhausted quota remains active")
+	}
+	entry.TotalBytes = 0
+	if isTrafficExceeded(entry) {
+		t.Fatal("zero quota must mean unlimited")
+	}
+	entry.ExpiresAt = time.Now().Add(-time.Minute).Unix()
+	if !isPasswordExpired(entry) {
+		t.Fatal("expired user remains active")
+	}
+}
+
+func TestUserDeviceLimitRejectsAdditionalBinding(t *testing.T) {
+	dbMutex.Lock()
+	previousDB := db
+	db = &Database{Passwords: make(map[string]*PasswordEntry), Devices: make(map[string]*ClientDevice)}
+	entry := &PasswordEntry{MaxDevices: 1}
+	db.Passwords["user"] = entry
+	defer func() {
+		db = previousDB
+		dbMutex.Unlock()
+	}()
+	if !bindDeviceToEntry(entry, "first") {
+		t.Fatal("first device was rejected")
+	}
+	if entryCanAcceptDevice(entry, "second") || bindDeviceToEntry(entry, "second") {
+		t.Fatal("additional device passed the configured limit")
+	}
+	if !entryCanAcceptDevice(entry, "first") {
+		t.Fatal("existing device was rejected")
 	}
 }

@@ -115,12 +115,8 @@ func updateUserDirectDB(oldPassword, newPassword string, req userAPIReq, manageD
 	if req.TotalGB >= 0 {
 		entry.TotalBytes = gbToBytes(req.TotalGB)
 	}
-	if req.MaxDownMBps > 0 {
-		entry.MaxDownMBps = req.MaxDownMBps
-	}
-	if req.MaxUpMBps > 0 {
-		entry.MaxUpMBps = req.MaxUpMBps
-	}
+	entry.MaxDownMBps = req.MaxDownMBps
+	entry.MaxUpMBps = req.MaxUpMBps
 	if req.Active != nil {
 		entry.IsDeactivated = !*req.Active
 	}

@@ -32,6 +32,9 @@
             </div>
           </div>
         </a-form-item>
+        <a-form-item v-if="userModal.isMain || userModal.isEdit" label="Последний онлайн">
+          <span>[[ formatLastSeen(userForm.last_seen_at) ]]</span>
+        </a-form-item>
         <a-form-item v-if="userModal.isMain" label="Комментарий">
           <span>[[ userForm.comment ]]</span>
         </a-form-item>
@@ -493,6 +496,9 @@
         if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + ' MB';
         return (b / 1024 / 1024 / 1024).toFixed(2) + ' GB';
       },
+      formatLastSeen(ts) {
+        return ts ? moment.unix(Number(ts)).format('DD.MM.YYYY HH:mm') : 'Ещё не подключался';
+      },
       /** В БД — MB/s для tc; в UI — Мбит/с (1 Мбит/с = 0.125 MB/s). */
       mbitFromStoredMb(mb) {
         const v = Number(mb) || 0;
@@ -534,6 +540,7 @@
           expires_at: 0,
           up_bytes: 0,
           down_bytes: 0,
+          last_seen_at: 0,
           total_gb: 0,
           max_down_mbit: 0,
           max_up_mbit: 0,
@@ -571,6 +578,7 @@
           expires_at: row.expires_at || 0,
           up_bytes: row.up_bytes || 0,
           down_bytes: row.down_bytes || 0,
+          last_seen_at: row.last_seen_at || 0,
           total_gb: Number(row.total_gb) || 0,
           max_down_mbit: this.mbitFromStoredMb(row.max_down_mbps),
           max_up_mbit: this.mbitFromStoredMb(row.max_up_mbps),

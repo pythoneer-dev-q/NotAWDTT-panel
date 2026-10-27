@@ -44,6 +44,13 @@ type Device struct {
 	PubKey   string
 }
 
+// NodeUserPresence is the user activity and device binding reported by a VPS node.
+type NodeUserPresence struct {
+	Password   string   `json:"password"`
+	DeviceIDs  []string `json:"device_ids"`
+	LastSeenAt int64    `json:"last_seen_at"`
+}
+
 // SaveOptions — поведение SaveStore.
 type SaveOptions struct {
 	// PreserveSubIDs: если SubID пуст у пользователя — оставить из БД (сервер).

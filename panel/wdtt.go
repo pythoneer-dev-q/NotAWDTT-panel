@@ -166,8 +166,9 @@ func loadPasswords() (*PasswordsDB, error) {
 
 func dedupePasswordDeviceBindings(db *PasswordsDB) {
 	type pick struct {
-		pass   string
-		isMain bool
+		pass       string
+		isMain     bool
+		lastSeenAt int64
 	}
 	chosen := map[string]pick{}
 	for pass, entry := range db.Passwords {
@@ -177,10 +178,12 @@ func dedupePasswordDeviceBindings(db *PasswordsDB) {
 		normalizeEntryDevices(entry)
 		isMain := pass == db.MainPassword
 		for _, did := range allEntryDeviceIDsPanel(entry) {
+			candidate := pick{pass: pass, isMain: isMain, lastSeenAt: entry.LastSeenAt}
 			if cur, ok := chosen[did]; !ok {
-				chosen[did] = pick{pass: pass, isMain: isMain}
-			} else if cur.isMain && !isMain {
-				chosen[did] = pick{pass: pass, isMain: isMain}
+				chosen[did] = candidate
+			} else if (cur.isMain && !isMain) || (cur.isMain == isMain &&
+				(entry.LastSeenAt > cur.lastSeenAt || (entry.LastSeenAt == cur.lastSeenAt && pass < cur.pass))) {
+				chosen[did] = candidate
 			}
 		}
 	}
@@ -280,6 +283,7 @@ func passwordsTrafficTotals(db *PasswordsDB) (up, down int64) {
 func mainUserRow(db *PasswordsDB, stats *ServerStats, inbound WdttInboundConfig, serverIP, vpnTitle, subURL string) map[string]interface{} {
 	upBytes := int64(0)
 	downBytes := int64(0)
+	lastSeenAt := int64(0)
 	deviceIDs := []string{}
 	devicesBound := 0
 	var mainEntry *PasswordEntry
@@ -287,6 +291,7 @@ func mainUserRow(db *PasswordsDB, stats *ServerStats, inbound WdttInboundConfig,
 		mainEntry = entry
 		upBytes = entry.UpBytes
 		downBytes = entry.DownBytes
+		lastSeenAt = entry.LastSeenAt
 		normalizeEntryDevices(entry)
 		deviceIDs = append([]string(nil), entry.DeviceIDs...)
 		devicesBound = len(entry.DeviceIDs)
@@ -328,6 +333,7 @@ func mainUserRow(db *PasswordsDB, stats *ServerStats, inbound WdttInboundConfig,
 		"traffic_exceeded": false,
 		"active":           true,
 		"online":           userOnlineFromStats(db.MainPassword, strings.Join(deviceIDs, ", "), true, stats),
+		"last_seen_at":     lastSeenAt,
 		"ports":            ports,
 		"vk_hash":          vkHash,
 		"dtls_port":        dtlsPort,

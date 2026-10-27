@@ -410,15 +410,21 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		OnlineUsers int    `json:"online_users"`
-		TrafficUp   int64  `json:"traffic_up"`
-		TrafficDown int64  `json:"traffic_down"`
-		CertSHA256  string `json:"cert_sha256"`
-		Version     string `json:"version"`
-		BuildCommit string `json:"build_commit"`
+		OnlineUsers int                        `json:"online_users"`
+		TrafficUp   int64                      `json:"traffic_up"`
+		TrafficDown int64                      `json:"traffic_down"`
+		CertSHA256  string                     `json:"cert_sha256"`
+		Version     string                     `json:"version"`
+		BuildCommit string                     `json:"build_commit"`
+		Users       []paneldb.NodeUserPresence `json:"users"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
 	if err := readJSON(r, &req); err != nil {
 		jsonError(w, "bad request", 400)
+		return
+	}
+	if err := validateNodeUserPresence(req.Users, time.Now().Unix()); err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if req.OnlineUsers < 0 || req.TrafficUp < 0 || req.TrafficDown < 0 ||
@@ -434,6 +440,10 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "db error", 500)
 		return
 	}
+	if err := m.UpdateNodeUserPresence(ctx, req.Users); err != nil {
+		jsonError(w, "user presence update failed", http.StatusInternalServerError)
+		return
+	}
 
 	if err := m.UpdateNodeHeartbeat(ctx, node.ApiKey, req.OnlineUsers, req.TrafficUp, req.TrafficDown, req.CertSHA256, req.Version, req.BuildCommit); err != nil {
 		jsonError(w, err.Error(), 404)
@@ -441,6 +451,24 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonOK(w, map[string]bool{"ok": true})
+}
+
+func validateNodeUserPresence(users []paneldb.NodeUserPresence, now int64) error {
+	if len(users) > 500 {
+		return fmt.Errorf("too many user presence updates")
+	}
+	for _, user := range users {
+		if len(user.Password) < 1 || len(user.Password) > 128 ||
+			user.LastSeenAt < 0 || user.LastSeenAt > now+60 || len(user.DeviceIDs) > paneldb.MaxDevicesLimit {
+			return fmt.Errorf("invalid user presence")
+		}
+		for _, id := range user.DeviceIDs {
+			if strings.TrimSpace(id) == "" || len(id) > 4096 {
+				return fmt.Errorf("invalid device ID")
+			}
+		}
+	}
+	return nil
 }
 
 // handleNodeBinary — отдаёт скомпилированный бинарник WDTT для подключаемых VPS-нод

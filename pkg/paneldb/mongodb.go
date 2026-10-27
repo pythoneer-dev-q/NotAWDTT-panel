@@ -560,6 +560,36 @@ func (m *MongoDB) UpdateLastSeenBatch(ctx context.Context, updates map[string]in
 	return nil
 }
 
+// UpdateNodeUserPresence merges node activity into existing panel users without
+// replacing their limits, traffic counters or subscription identifiers.
+func (m *MongoDB) UpdateNodeUserPresence(ctx context.Context, users []NodeUserPresence) error {
+	models := make([]mongo.WriteModel, 0, len(users))
+	for _, user := range users {
+		changes := bson.M{}
+		if user.LastSeenAt > 0 {
+			changes["last_seen_at"] = bson.M{"$max": bson.A{
+				bson.M{"$ifNull": bson.A{"$last_seen_at", int64(0)}}, user.LastSeenAt,
+			}}
+		}
+		if len(user.DeviceIDs) > 0 {
+			changes["device_id"] = bson.M{"$literal": user.DeviceIDs[0]}
+			changes["device_ids"] = bson.M{"$setUnion": bson.A{
+				bson.M{"$ifNull": bson.A{"$device_ids", bson.A{}}},
+				bson.M{"$literal": user.DeviceIDs},
+			}}
+		}
+		if len(changes) == 0 {
+			continue
+		}
+		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{"_id": user.Password}).SetUpdate(bson.A{bson.M{"$set": changes}}))
+	}
+	if len(models) == 0 {
+		return nil
+	}
+	_, err := m.db.Collection("users").BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false))
+	return err
+}
+
 func (m *MongoDB) AddTraffic(ctx context.Context, pass string, downDelta, upDelta int64) error {
 	_, err := m.db.Collection("users").UpdateOne(ctx,
 		bson.M{"_id": pass},

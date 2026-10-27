@@ -729,6 +729,39 @@ type NodeSyncUser struct {
 	MaxDevices  int     `json:"max_devices"`
 }
 
+type reportedNodePresence struct {
+	lastSeenAt int64
+	deviceIDs  string
+}
+
+// Called with dbMutex held. Only changed user activity is sent in each heartbeat.
+func pendingNodeUserPresenceLocked(reported map[string]reportedNodePresence, limit int) ([]paneldb.NodeUserPresence, map[string]reportedNodePresence) {
+	users := make([]paneldb.NodeUserPresence, 0)
+	states := make(map[string]reportedNodePresence)
+	if db == nil || limit < 1 {
+		return users, states
+	}
+	for password, entry := range db.Passwords {
+		if entry == nil || entry.IsDeactivated || len(users) >= limit {
+			continue
+		}
+		ids := allEntryDeviceIDs(entry)
+		if len(ids) > paneldb.MaxDevicesLimit {
+			ids = ids[:paneldb.MaxDevicesLimit]
+		}
+		if entry.LastSeenAt <= 0 && len(ids) == 0 {
+			continue
+		}
+		state := reportedNodePresence{lastSeenAt: entry.LastSeenAt, deviceIDs: strings.Join(ids, "\x00")}
+		if reported[password] == state {
+			continue
+		}
+		users = append(users, paneldb.NodeUserPresence{Password: password, DeviceIDs: ids, LastSeenAt: entry.LastSeenAt})
+		states[password] = state
+	}
+	return users, states
+}
+
 // ApplyNodeSyncPasswords keeps compatibility with panels that only send passwords.
 func ApplyNodeSyncPasswords(passwords []string) {
 	users := make([]NodeSyncUser, 0, len(passwords))
@@ -830,6 +863,7 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin, version
 	}
 	var lastUp, lastDown int64
 	baselineSet := false
+	reportedPresence := make(map[string]reportedNodePresence)
 
 	syncOnce := func() {
 		syncURL := masterURL + "/node/sync"
@@ -871,6 +905,13 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin, version
 
 		dbMutex.Lock()
 		onlineUsers := countOnlineUsersLocked()
+		for password := range reportedPresence {
+			entry := db.Passwords[password]
+			if entry == nil || entry.IsDeactivated {
+				delete(reportedPresence, password)
+			}
+		}
+		presence, presenceStates := pendingNodeUserPresenceLocked(reportedPresence, 500)
 		var currentUp, currentDown int64
 		for _, e := range db.Passwords {
 			if e != nil {
@@ -900,6 +941,7 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin, version
 			"cert_sha256":  localNodeCertSHA256(),
 			"version":      version,
 			"build_commit": buildCommit,
+			"users":        presence,
 		})
 		hbReq, err := http.NewRequestWithContext(ctx, http.MethodPost, hbURL, bytes.NewReader(hbBody))
 		if err != nil {
@@ -919,6 +961,9 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin, version
 		}
 		lastUp = currentUp
 		lastDown = currentDown
+		for password, state := range presenceStates {
+			reportedPresence[password] = state
+		}
 	}
 
 	go func() {

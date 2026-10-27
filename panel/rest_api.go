@@ -3,14 +3,17 @@ package panel
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ildarmaga/wdtt/pkg/paneldb"
+	"github.com/ildarmaga/wdtt/pkg/vkhash"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -55,6 +58,31 @@ type RestNodeLink struct {
 	NodeName string `json:"node_name"`
 	Host     string `json:"host"`
 	Link     string `json:"link"`
+}
+
+var restVKHashMu sync.Mutex
+
+func appendRestVKHashes(existing string, inputs []string) (string, error) {
+	var added []string
+	for _, input := range inputs {
+		for _, part := range strings.FieldsFunc(input, func(r rune) bool {
+			return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t' || r == ' '
+		}) {
+			hash := vkhash.StripOne(part)
+			if hash == "" || len(hash) > 1024 || strings.EqualFold(hash, vkhash.Placeholder) {
+				return "", fmt.Errorf("invalid VK hash or join URL")
+			}
+			added = append(added, hash)
+		}
+	}
+	if len(added) == 0 {
+		return "", fmt.Errorf("at least one VK hash is required")
+	}
+	combined := vkhash.Parse(existing+","+strings.Join(added, ","), vkhash.Max+1)
+	if len(combined) > vkhash.Max {
+		return "", fmt.Errorf("maximum %d unique VK hashes per user", vkhash.Max)
+	}
+	return strings.Join(combined, ","), nil
 }
 
 // setRestCORS adds standard CORS headers for REST API consumption.
@@ -401,6 +429,56 @@ func (a *App) handleRestUserItem(w http.ResponseWriter, r *http.Request) {
 		stats := loadServerStats()
 
 		switch action {
+		case "vk-hashes":
+			if r.Method != http.MethodPost {
+				restError(w, http.StatusMethodNotAllowed, "POST required for vk-hashes")
+				return
+			}
+			var input struct {
+				VKHash string   `json:"vk_hash"`
+				Hashes []string `json:"hashes"`
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+			if err := readJSON(r, &input); err != nil {
+				restError(w, http.StatusBadRequest, "invalid json payload: "+err.Error())
+				return
+			}
+			inputs := append([]string{input.VKHash}, input.Hashes...)
+			restVKHashMu.Lock()
+			defer restVKHashMu.Unlock()
+			// Reload after acquiring the lock so concurrent append requests don't
+			// overwrite each other with a stale list.
+			db, err = loadPasswords()
+			if err != nil || db == nil {
+				restError(w, http.StatusInternalServerError, "failed to load users")
+				return
+			}
+			actualPass = a.resolveUserPassword(db, userKey)
+			if actualPass == "" || db.Passwords[actualPass] == nil {
+				restError(w, http.StatusNotFound, "user not found")
+				return
+			}
+			hashes, err := appendRestVKHashes(db.Passwords[actualPass].VkHash, inputs)
+			if err != nil {
+				restError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			req := userUpdateReqFromEntry(db.Passwords[actualPass])
+			req.VkHash = hashes
+			if err := updateUser(actualPass, actualPass, req, false); err != nil {
+				restError(w, http.StatusInternalServerError, "failed to update VK hashes: "+err.Error())
+				return
+			}
+			db, err = loadPasswords()
+			if err != nil || db == nil {
+				restError(w, http.StatusInternalServerError, "hashes saved, but failed to reload user")
+				return
+			}
+			restJSON(w, http.StatusOK, map[string]interface{}{
+				"success": true, "message": "VK hashes updated",
+				"user": a.buildSingleRestUser(r.Context(), db, actualPass, inbound, linkHost, stats),
+			})
+
 		case "activate":
 			if r.Method != http.MethodPost {
 				restError(w, http.StatusMethodNotAllowed, "POST required for activate")

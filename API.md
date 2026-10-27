@@ -27,6 +27,7 @@ curl -H "X-API-Key: ВАШ_КЛЮЧ" "https://SERVER:2860/api/users"
 - `POST /api/users` — создание пользователя (`total_gb`, `expires_at`, `max_devices`). Значения `0` = безлимит!
 - `GET /api/users/{id}` — полная карточка, ссылки подключения со всех нод и подписка
 - `PUT` / `PATCH /api/users/{id}` — обновление данных пользователя
+- `POST /api/users/{id}/vk-hashes` — добавить VK-хеши или ссылки приглашения, сохранив существующие (до 4 уникальных)
 - `DELETE /api/users/{id}` — удаление пользователя
 - `POST /api/users/{id}/activate` — активация / разблокировка
 - `POST /api/users/{id}/block` — блокировка
@@ -66,6 +67,11 @@ curl -s -X POST -H "X-API-Key: ВАШ_КЛЮЧ" "http://SERVER:2860/api/users/tg
 
 # 6. Удаление
 curl -s -X DELETE -H "X-API-Key: ВАШ_КЛЮЧ" "http://SERVER:2860/api/users/tg_user_123"
+
+# 7. Добавить VK-хеши к пользователю
+curl -s -X POST -H "X-API-Key: ВАШ_КЛЮЧ" -H "Content-Type: application/json" \
+  -d '{"hashes":["hash1","https://vk.ru/call/join/hash2"]}' \
+  "http://SERVER:2860/api/users/tg_user_123/vk-hashes"
 ```
 
 Подробные примеры на Python и описание структур данных см. в [docs/API.md](docs/API.md).

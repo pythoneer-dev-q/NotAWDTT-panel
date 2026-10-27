@@ -156,6 +156,41 @@ func TestRestUserLifecycleAndLimits(t *testing.T) {
 	}
 	pass := createResp.User.PasswordKey
 
+	// Add VK hashes without losing existing hashes; both URL and bare forms work.
+	addHashes := func(body string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/api/users/"+pass+"/vk-hashes", bytes.NewBufferString(body))
+		request.Header.Set("Authorization", "Bearer "+token)
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, request)
+		return response
+	}
+	added := addHashes(`{"hashes":["https://vk.ru/call/join/hash1", "hash2"]}`)
+	if added.Code != http.StatusOK {
+		t.Fatalf("add hashes: %d: %s", added.Code, added.Body.String())
+	}
+	added = addHashes(`{"vk_hash":"hash2,hash3"}`)
+	var hashesResp struct {
+		User RestUserItem `json:"user"`
+	}
+	if added.Code != http.StatusOK || json.Unmarshal(added.Body.Bytes(), &hashesResp) != nil || hashesResp.User.VkHash != "hash1,hash2,hash3" {
+		t.Fatalf("append hashes: %d: %s", added.Code, added.Body.String())
+	}
+	if rejected := addHashes(`{"hashes":["hash4", "hash5"]}`); rejected.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for over-limit hashes: %d: %s", rejected.Code, rejected.Body.String())
+	}
+	getHashes := httptest.NewRequest(http.MethodGet, "/api/users/"+pass, nil)
+	getHashes.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, getHashes)
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &hashesResp) != nil || hashesResp.User.VkHash != "hash1,hash2,hash3" {
+		t.Fatalf("rejected request changed hashes: %d: %s", w.Code, w.Body.String())
+	}
+	payload, err := decodeWdttShareLink(hashesResp.User.Link)
+	if err != nil || payload.Hash != "hash1,hash2,hash3" {
+		t.Fatalf("connection link does not include hashes: %#v, %v", payload, err)
+	}
+
 	// Verify limits are stored and returned
 	if createResp.User.TotalGB != 50.0 {
 		t.Fatalf("expected TotalGB=50, got %f", createResp.User.TotalGB)

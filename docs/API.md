@@ -38,6 +38,11 @@ Authorization: Bearer YOUR_AUTH_TOKEN
 
 ## 3. Формат ответов
 
+Фактические REST-ответы панели содержат поля на верхнем уровне (например,
+`user`, `users`, `total`), а не обязательно внутри `data`. Примеры ниже с
+`data` относятся к устаревшему формату; для текущего API используйте
+`response.user` или `response.users`. Ошибка содержит `success: false` и `error`.
+
 ### Успешный ответ (HTTP 200 / 201)
 ```json
 {
@@ -211,6 +216,39 @@ X-API-Key: <API_KEY>
   "active": true
 }
 ```
+
+#### VK-хеши пользователя
+
+Хеши хранятся отдельно для каждого пользователя в поле `vk_hash`. Их можно
+указать при создании пользователя (`POST /api/users`) или заменить списком
+через `PATCH /api/users/{id}`:
+
+```bash
+curl -X PATCH "$BASE/api/users/$USER_ID" \
+  -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
+  -d '{"vk_hash":"hash1,https://vk.ru/call/join/hash2"}'
+```
+
+Чтобы **добавить** хеши, не перезаписывая уже сохранённые, используйте
+`POST /api/users/{id}/vk-hashes`. Поддерживаются строка `vk_hash` и массив
+строк `hashes` — можно передать оба поля:
+
+```bash
+curl -X POST "$BASE/api/users/$USER_ID/vk-hashes" \
+  -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
+  -d '{"hashes":["hash3","https://vk.com/call/join/hash4"]}'
+```
+
+В ответе HTTP 200 возвращается актуальная карточка на верхнем уровне:
+`{"success":true,"message":"VK hashes updated","user":{"vk_hash":"hash1,hash2,hash3,hash4",...}}`.
+`GET /api/users/{id}` также возвращает `user.vk_hash`, ссылки нод и `sub_url`.
+`{id}` — пароль пользователя (`password_key`) или его `sub_id`.
+
+Принимаются bare-хеши и ссылки приглашения VK; повторы удаляются, порядок
+сохраняется. Максимум — **4 уникальных хеша** на пользователя. Добавление
+пятого или пустой/некорректный запрос возвращает HTTP 400 без изменений.
+После обновления получите новые ссылки из карточки или обновите подписку в
+клиенте: ранее скопированные ссылки сами не изменятся.
 
 ---
 

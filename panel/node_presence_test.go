@@ -16,6 +16,8 @@ func TestNodePresenceRejectsInvalidActivity(t *testing.T) {
 	for _, user := range []paneldb.NodeUserPresence{
 		{Password: "user", LastSeenAt: now + 61},
 		{Password: "user", DeviceIDs: []string{"  "}},
+		{Password: "user", UpBytes: -1},
+		{Password: "user", DownBytes: 1 << 61},
 		{Password: "", DeviceIDs: []string{"phone"}},
 	} {
 		if err := validateNodeUserPresence([]paneldb.NodeUserPresence{user}, now); err == nil {

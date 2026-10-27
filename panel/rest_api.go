@@ -622,7 +622,7 @@ func (a *App) buildSingleRestUserWithNodes(db *PasswordsDB, pass string, inbound
 		MaxDevices:      entryMaxDevices(db, pass, entry),
 		MaxDownMBps:     entry.MaxDownMBps,
 		MaxUpMBps:       entry.MaxUpMBps,
-		Online:          userOnlineFromStats(pass, deviceIDsDisplay(entry), pass == db.MainPassword, stats),
+		Online:          userOnline(pass, deviceIDsDisplay(entry), pass == db.MainPassword, stats, entry.NodeOnlineAt),
 		LastSeenAt:      entry.LastSeenAt,
 		VkHash:          entry.VkHash,
 		Ports:           entry.Ports,

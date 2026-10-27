@@ -51,3 +51,13 @@ func TestUserOnlineFromStatsFresh(t *testing.T) {
 		t.Fatal("fresh stats should mark matching user online")
 	}
 }
+
+func TestUserOnlineFromRemoteNodeHeartbeat(t *testing.T) {
+	now := time.Now().Unix()
+	if !userOnline("secret", "dev1", false, nil, now) {
+		t.Fatal("fresh remote node heartbeat should mark user online")
+	}
+	if userOnline("secret", "dev1", false, nil, now-int64(remoteNodeOnlineMaxAge/time.Second)-1) {
+		t.Fatal("stale remote node heartbeat should not mark user online")
+	}
+}

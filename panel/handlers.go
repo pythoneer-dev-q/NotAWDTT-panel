@@ -305,7 +305,7 @@ func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
 			"is_expired":       isPasswordExpired(entry),
 			"is_deactivated":   entry.IsDeactivated,
 			"active":           !entry.IsDeactivated && !isPasswordExpired(entry) && !trafficExceeded(entry),
-			"online":           userOnlineFromStats(pass, deviceIDsDisplay(entry), false, stats),
+			"online":           userOnline(pass, deviceIDsDisplay(entry), false, stats, entry.NodeOnlineAt),
 			"last_seen_at":     entry.LastSeenAt,
 			"ports":            entry.Ports,
 			"dtls_port":        dtlsPort,

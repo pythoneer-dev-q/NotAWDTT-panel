@@ -15,6 +15,15 @@ func LoadUsersRev(db *sql.DB) (int64, error) {
 	return rev, err
 }
 
+// BumpUsersRev notifies panel readers that user activity or bindings changed.
+func BumpUsersRev(db *sql.DB) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec(`UPDATE wdtt_global SET users_rev = users_rev + 1 WHERE id = 1`)
+	return err
+}
+
 func bumpUsersRevInTx(tx *sql.Tx) error {
 	if tx == nil {
 		return nil

@@ -230,16 +230,6 @@ func userLabel(password string, isMain bool) string {
 	return maskPassword(password)
 }
 
-func countOnlineUsersLocked() int32 {
-	var n int32
-	for _, info := range onlineUsers {
-		if info.Sessions > 0 {
-			n++
-		}
-	}
-	return n
-}
-
 func deviceSessionCount(deviceID string) int {
 	if deviceID == "" {
 		return 0
@@ -457,9 +447,11 @@ func forEachOnlinePassword(fn func(string)) {
 		seen[pass] = struct{}{}
 		fn(pass)
 	}
+	now := time.Now()
+	timeout := time.Duration(wgPeerOnlineMaxAgeSec()) * time.Second
 	wgActivityMu.Lock()
 	for _, s := range wgActivity {
-		if s != nil {
+		if s != nil && !s.lastChange.IsZero() && now.Sub(s.lastChange) < timeout {
 			emit(s.password)
 		}
 	}

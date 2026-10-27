@@ -413,9 +413,12 @@ func (a *App) serveSubInfoPage(w http.ResponseWriter, r *http.Request, subID str
 	if stats := loadServerStats(); stats != nil && stats.Timestamp > 0 {
 		db, err := loadPasswords()
 		isMain := err == nil && db != nil && info.Password == db.MainPassword
-		if userOnlineFromStats(info.Password, deviceIDsDisplay(info.Entry), isMain, stats) && stats.Timestamp > lastOnline {
+		if userOnline(info.Password, deviceIDsDisplay(info.Entry), isMain, stats, info.Entry.NodeOnlineAt) && stats.Timestamp > lastOnline {
 			lastOnline = stats.Timestamp
 		}
+	}
+	if info.Entry.NodeOnlineAt > lastOnline {
+		lastOnline = info.Entry.NodeOnlineAt
 	}
 	host := r.Host
 	if h := r.Header.Get("X-Forwarded-Host"); h != "" {

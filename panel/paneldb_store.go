@@ -83,6 +83,7 @@ func userEntryToPaneldb(e *PasswordEntry) *paneldb.User {
 		VkHash:        e.VkHash,
 		SubID:         e.SubID,
 		LastSeenAt:    e.LastSeenAt,
+		NodeOnlineAt:  e.NodeOnlineAt,
 	}
 }
 
@@ -103,6 +104,7 @@ func userEntryFromPaneldb(u *paneldb.User) *PasswordEntry {
 		VkHash:        u.VkHash,
 		SubID:         u.SubID,
 		LastSeenAt:    u.LastSeenAt,
+		NodeOnlineAt:  u.NodeOnlineAt,
 	}
 }
 

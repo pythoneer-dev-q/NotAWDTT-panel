@@ -410,28 +410,38 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		OnlineUsers int                        `json:"online_users"`
-		TrafficUp   int64                      `json:"traffic_up"`
-		TrafficDown int64                      `json:"traffic_down"`
-		CertSHA256  string                     `json:"cert_sha256"`
-		Version     string                     `json:"version"`
-		BuildCommit string                     `json:"build_commit"`
-		Users       []paneldb.NodeUserPresence `json:"users"`
+		OnlineUsers      int                        `json:"online_users"`
+		TrafficUp        int64                      `json:"traffic_up"`
+		TrafficDown      int64                      `json:"traffic_down"`
+		TrafficUpTotal   *int64                     `json:"traffic_up_total"`
+		TrafficDownTotal *int64                     `json:"traffic_down_total"`
+		CertSHA256       string                     `json:"cert_sha256"`
+		Version          string                     `json:"version"`
+		BuildCommit      string                     `json:"build_commit"`
+		Users            []paneldb.NodeUserPresence `json:"users"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
 	if err := readJSON(r, &req); err != nil {
 		jsonError(w, "bad request", 400)
 		return
 	}
-	if err := validateNodeUserPresence(req.Users, time.Now().Unix()); err != nil {
+	now := time.Now().Unix()
+	if err := validateNodeUserPresence(req.Users, now); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if req.OnlineUsers < 0 || req.TrafficUp < 0 || req.TrafficDown < 0 ||
+		req.TrafficUp > 1<<60 || req.TrafficDown > 1<<60 ||
 		(req.CertSHA256 != "" && !certFingerprintPattern.MatchString(req.CertSHA256)) ||
 		!nodeVersionPattern.MatchString(req.Version) ||
 		(req.BuildCommit != "" && !buildCommitPattern.MatchString(req.BuildCommit)) {
 		jsonError(w, "invalid node status", http.StatusBadRequest)
+		return
+	}
+	if (req.TrafficUpTotal == nil) != (req.TrafficDownTotal == nil) ||
+		(req.TrafficUpTotal != nil && (*req.TrafficUpTotal < 0 || *req.TrafficDownTotal < 0 ||
+			*req.TrafficUpTotal > 1<<60 || *req.TrafficDownTotal > 1<<60)) {
+		jsonError(w, "invalid cumulative node traffic", http.StatusBadRequest)
 		return
 	}
 
@@ -440,12 +450,25 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "db error", 500)
 		return
 	}
-	if err := m.UpdateNodeUserPresence(ctx, req.Users); err != nil {
+	if err := m.UpdateNodeUserPresence(ctx, node.ID, req.Users, now); err != nil {
 		jsonError(w, "user presence update failed", http.StatusInternalServerError)
 		return
 	}
+	if len(req.Users) > 0 {
+		if panelDBEnabled() {
+			_ = paneldb.BumpUsersRev(panelDB)
+		}
+		invalidatePasswordsCache()
+		broadcastServerStatusEvent()
+	}
 
-	if err := m.UpdateNodeHeartbeat(ctx, node.ApiKey, req.OnlineUsers, req.TrafficUp, req.TrafficDown, req.CertSHA256, req.Version, req.BuildCommit); err != nil {
+	if req.TrafficUpTotal != nil {
+		err = m.UpdateNodeHeartbeatCumulative(ctx, node.ApiKey, req.OnlineUsers, req.TrafficUp, req.TrafficDown,
+			*req.TrafficUpTotal, *req.TrafficDownTotal, req.CertSHA256, req.Version, req.BuildCommit)
+	} else {
+		err = m.UpdateNodeHeartbeat(ctx, node.ApiKey, req.OnlineUsers, req.TrafficUp, req.TrafficDown, req.CertSHA256, req.Version, req.BuildCommit)
+	}
+	if err != nil {
 		jsonError(w, err.Error(), 404)
 		return
 	}
@@ -454,12 +477,15 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 }
 
 func validateNodeUserPresence(users []paneldb.NodeUserPresence, now int64) error {
+	const maxReportedTrafficBytes = int64(1 << 60)
 	if len(users) > 500 {
 		return fmt.Errorf("too many user presence updates")
 	}
 	for _, user := range users {
 		if len(user.Password) < 1 || len(user.Password) > 128 ||
-			user.LastSeenAt < 0 || user.LastSeenAt > now+60 || len(user.DeviceIDs) > paneldb.MaxDevicesLimit {
+			user.LastSeenAt < 0 || user.LastSeenAt > now+60 || user.UpBytes < 0 || user.DownBytes < 0 ||
+			user.UpBytes > maxReportedTrafficBytes || user.DownBytes > maxReportedTrafficBytes ||
+			len(user.DeviceIDs) > paneldb.MaxDevicesLimit {
 			return fmt.Errorf("invalid user presence")
 		}
 		for _, id := range user.DeviceIDs {

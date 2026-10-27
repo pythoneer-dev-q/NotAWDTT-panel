@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -732,31 +733,55 @@ type NodeSyncUser struct {
 type reportedNodePresence struct {
 	lastSeenAt int64
 	deviceIDs  string
+	upBytes    int64
+	downBytes  int64
+	online     bool
 }
 
-// Called with dbMutex held. Only changed user activity is sent in each heartbeat.
-func pendingNodeUserPresenceLocked(reported map[string]reportedNodePresence, limit int) ([]paneldb.NodeUserPresence, map[string]reportedNodePresence) {
+// Called with dbMutex held. Changed users and all currently online users are sent.
+func pendingNodeUserPresenceLocked(reported map[string]reportedNodePresence, online map[string]bool, limit int) ([]paneldb.NodeUserPresence, map[string]reportedNodePresence) {
 	users := make([]paneldb.NodeUserPresence, 0)
 	states := make(map[string]reportedNodePresence)
 	if db == nil || limit < 1 {
 		return users, states
 	}
-	for password, entry := range db.Passwords {
-		if entry == nil || entry.IsDeactivated || len(users) >= limit {
+	passwords := make([]string, 0, len(db.Passwords))
+	for password := range db.Passwords {
+		passwords = append(passwords, password)
+	}
+	sort.Slice(passwords, func(i, j int) bool {
+		if online[passwords[i]] != online[passwords[j]] {
+			return online[passwords[i]]
+		}
+		return passwords[i] < passwords[j]
+	})
+	for _, password := range passwords {
+		entry := db.Passwords[password]
+		if entry == nil || len(users) >= limit {
 			continue
 		}
 		ids := allEntryDeviceIDs(entry)
 		if len(ids) > paneldb.MaxDevicesLimit {
 			ids = ids[:paneldb.MaxDevicesLimit]
 		}
-		if entry.LastSeenAt <= 0 && len(ids) == 0 {
+		isOnline := online[password]
+		if entry.LastSeenAt <= 0 && len(ids) == 0 && entry.UpBytes == 0 && entry.DownBytes == 0 && !isOnline {
 			continue
 		}
-		state := reportedNodePresence{lastSeenAt: entry.LastSeenAt, deviceIDs: strings.Join(ids, "\x00")}
-		if reported[password] == state {
+		state := reportedNodePresence{
+			lastSeenAt: entry.LastSeenAt,
+			deviceIDs:  strings.Join(ids, "\x00"),
+			upBytes:    entry.UpBytes,
+			downBytes:  entry.DownBytes,
+			online:     isOnline,
+		}
+		if reported[password] == state && !isOnline {
 			continue
 		}
-		users = append(users, paneldb.NodeUserPresence{Password: password, DeviceIDs: ids, LastSeenAt: entry.LastSeenAt})
+		users = append(users, paneldb.NodeUserPresence{
+			Password: password, DeviceIDs: ids, LastSeenAt: entry.LastSeenAt,
+			Online: isOnline, UpBytes: entry.UpBytes, DownBytes: entry.DownBytes,
+		})
 		states[password] = state
 	}
 	return users, states
@@ -903,15 +928,23 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin, version
 			ApplyNodeSyncPasswords(data.Obj.Passwords)
 		}
 
+		onlineSnapshot := snapshotOnlineUsers()
+		onlinePasswords := make(map[string]bool, len(onlineSnapshot))
+		for _, item := range onlineSnapshot {
+			if password := strings.TrimSpace(item["password"]); password != "" {
+				onlinePasswords[password] = true
+			}
+		}
+		onlineUsers := len(onlineSnapshot)
+
 		dbMutex.Lock()
-		onlineUsers := countOnlineUsersLocked()
 		for password := range reportedPresence {
 			entry := db.Passwords[password]
-			if entry == nil || entry.IsDeactivated {
+			if entry == nil {
 				delete(reportedPresence, password)
 			}
 		}
-		presence, presenceStates := pendingNodeUserPresenceLocked(reportedPresence, 500)
+		presence, presenceStates := pendingNodeUserPresenceLocked(reportedPresence, onlinePasswords, 500)
 		var currentUp, currentDown int64
 		for _, e := range db.Passwords {
 			if e != nil {
@@ -935,13 +968,15 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin, version
 		}
 		hbURL := masterURL + "/node/heartbeat"
 		hbBody, _ := json.Marshal(map[string]interface{}{
-			"online_users": onlineUsers,
-			"traffic_up":   upDelta,
-			"traffic_down": downDelta,
-			"cert_sha256":  localNodeCertSHA256(),
-			"version":      version,
-			"build_commit": buildCommit,
-			"users":        presence,
+			"online_users":       onlineUsers,
+			"traffic_up":         upDelta,
+			"traffic_down":       downDelta,
+			"traffic_up_total":   currentUp,
+			"traffic_down_total": currentDown,
+			"cert_sha256":        localNodeCertSHA256(),
+			"version":            version,
+			"build_commit":       buildCommit,
+			"users":              presence,
 		})
 		hbReq, err := http.NewRequestWithContext(ctx, http.MethodPost, hbURL, bytes.NewReader(hbBody))
 		if err != nil {

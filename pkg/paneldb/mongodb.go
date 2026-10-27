@@ -2,6 +2,8 @@ package paneldb
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -91,6 +93,7 @@ type MongoUserDoc struct {
 	WbRoom        string   `bson:"wb_room" json:"wb_room"`
 	SubID         string   `bson:"sub_id" json:"sub_id"`
 	LastSeenAt    int64    `bson:"last_seen_at" json:"last_seen_at"`
+	NodeOnlineAt  int64    `bson:"node_online_at" json:"node_online_at"`
 }
 
 type MongoDeviceDoc struct {
@@ -322,6 +325,49 @@ func (m *MongoDB) UpdateNodeHeartbeat(ctx context.Context, apiKey string, online
 	return nil
 }
 
+// UpdateNodeHeartbeatCumulative updates node totals idempotently. The deltas are
+// only used to bridge the first heartbeat from an older node version.
+func (m *MongoDB) UpdateNodeHeartbeatCumulative(ctx context.Context, apiKey string, onlineUsers int, upDelta, downDelta, upTotal, downTotal int64, certSHA256, version, buildCommit string) error {
+	coll := m.db.Collection("nodes")
+	now := time.Now().Unix()
+	initialUp := upTotal - upDelta
+	if initialUp < 0 {
+		initialUp = 0
+	}
+	initialDown := downTotal - downDelta
+	if initialDown < 0 {
+		initialDown = 0
+	}
+	previousUp := bson.M{"$ifNull": bson.A{"$reported_traffic_up", initialUp}}
+	previousDown := bson.M{"$ifNull": bson.A{"$reported_traffic_down", initialDown}}
+	set := bson.M{
+		"last_seen_at": now,
+		"status":       "online",
+		"online_users": onlineUsers,
+		"cert_sha256":  certSHA256,
+		"version":      version,
+		"build_commit": buildCommit,
+		"traffic_up": bson.M{"$add": bson.A{
+			bson.M{"$ifNull": bson.A{"$traffic_up", int64(0)}},
+			bson.M{"$max": bson.A{int64(0), bson.M{"$subtract": bson.A{upTotal, previousUp}}}},
+		}},
+		"traffic_down": bson.M{"$add": bson.A{
+			bson.M{"$ifNull": bson.A{"$traffic_down", int64(0)}},
+			bson.M{"$max": bson.A{int64(0), bson.M{"$subtract": bson.A{downTotal, previousDown}}}},
+		}},
+		"reported_traffic_up":   upTotal,
+		"reported_traffic_down": downTotal,
+	}
+	res, err := coll.UpdateOne(ctx, bson.M{"api_key": apiKey}, bson.A{bson.M{"$set": set}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return fmt.Errorf("node not found for api_key")
+	}
+	return nil
+}
+
 // ----------------- Store CRUD -----------------
 
 func (m *MongoDB) LoadStore(ctx context.Context) (*Store, error) {
@@ -359,6 +405,7 @@ func (m *MongoDB) LoadStore(ctx context.Context) (*Store, error) {
 					WbRoom:        doc.WbRoom,
 					SubID:         doc.SubID,
 					LastSeenAt:    doc.LastSeenAt,
+					NodeOnlineAt:  doc.NodeOnlineAt,
 				}
 				NormalizeUser(u)
 				out.Users[doc.Password] = u
@@ -456,6 +503,7 @@ func (m *MongoDB) SaveStore(ctx context.Context, s *Store, opts SaveOptions) err
 			WbRoom:        u.WbRoom,
 			SubID:         subID,
 			LastSeenAt:    u.LastSeenAt,
+			NodeOnlineAt:  u.NodeOnlineAt,
 		}
 		_, err := m.db.Collection("users").UpdateOne(ctx,
 			bson.M{"_id": pass},
@@ -521,6 +569,7 @@ func (m *MongoDB) UpsertUser(ctx context.Context, pass string, u *User) error {
 		WbRoom:        u.WbRoom,
 		SubID:         u.SubID,
 		LastSeenAt:    u.LastSeenAt,
+		NodeOnlineAt:  u.NodeOnlineAt,
 	}
 	_, err := m.db.Collection("users").UpdateOne(ctx,
 		bson.M{"_id": pass},
@@ -560,9 +609,11 @@ func (m *MongoDB) UpdateLastSeenBatch(ctx context.Context, updates map[string]in
 	return nil
 }
 
-// UpdateNodeUserPresence merges node activity into existing panel users without
-// replacing their limits, traffic counters or subscription identifiers.
-func (m *MongoDB) UpdateNodeUserPresence(ctx context.Context, users []NodeUserPresence) error {
+// UpdateNodeUserPresence merges node activity into existing panel users. Per-node
+// cumulative counters make retries idempotent and survive a node worker restart.
+func (m *MongoDB) UpdateNodeUserPresence(ctx context.Context, nodeID string, users []NodeUserPresence, onlineAt int64) error {
+	nodeHash := sha256.Sum256([]byte(nodeID))
+	counterPath := "node_traffic.n_" + hex.EncodeToString(nodeHash[:12])
 	models := make([]mongo.WriteModel, 0, len(users))
 	for _, user := range users {
 		changes := bson.M{}
@@ -578,6 +629,22 @@ func (m *MongoDB) UpdateNodeUserPresence(ctx context.Context, users []NodeUserPr
 				bson.M{"$literal": user.DeviceIDs},
 			}}
 		}
+		if user.Online && onlineAt > 0 {
+			changes["node_online_at"] = bson.M{"$max": bson.A{
+				bson.M{"$ifNull": bson.A{"$node_online_at", int64(0)}}, onlineAt,
+			}}
+		}
+		previousUp := bson.M{"$ifNull": bson.A{"$" + counterPath + ".up", user.UpBytes}}
+		previousDown := bson.M{"$ifNull": bson.A{"$" + counterPath + ".down", user.DownBytes}}
+		changes["up_bytes"] = bson.M{"$add": bson.A{
+			bson.M{"$ifNull": bson.A{"$up_bytes", int64(0)}},
+			bson.M{"$max": bson.A{int64(0), bson.M{"$subtract": bson.A{user.UpBytes, previousUp}}}},
+		}}
+		changes["down_bytes"] = bson.M{"$add": bson.A{
+			bson.M{"$ifNull": bson.A{"$down_bytes", int64(0)}},
+			bson.M{"$max": bson.A{int64(0), bson.M{"$subtract": bson.A{user.DownBytes, previousDown}}}},
+		}}
+		changes[counterPath] = bson.M{"up": user.UpBytes, "down": user.DownBytes}
 		if len(changes) == 0 {
 			continue
 		}

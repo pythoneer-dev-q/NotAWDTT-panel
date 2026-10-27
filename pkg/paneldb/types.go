@@ -35,6 +35,7 @@ type User struct {
 	WbRoom        string
 	SubID         string
 	LastSeenAt    int64
+	NodeOnlineAt  int64
 }
 
 type Device struct {
@@ -44,11 +45,14 @@ type Device struct {
 	PubKey   string
 }
 
-// NodeUserPresence is the user activity and device binding reported by a VPS node.
+// NodeUserPresence is activity, traffic and device bindings reported by a VPS node.
 type NodeUserPresence struct {
 	Password   string   `json:"password"`
 	DeviceIDs  []string `json:"device_ids"`
 	LastSeenAt int64    `json:"last_seen_at"`
+	Online     bool     `json:"online"`
+	UpBytes    int64    `json:"up_bytes"`
+	DownBytes  int64    `json:"down_bytes"`
 }
 
 // SaveOptions — поведение SaveStore.

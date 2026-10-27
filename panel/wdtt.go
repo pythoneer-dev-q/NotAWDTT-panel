@@ -40,6 +40,7 @@ type PasswordEntry struct {
 	VkHash        string   `json:"vk_hash,omitempty"`
 	SubID         string   `json:"sub_id,omitempty"`
 	LastSeenAt    int64    `json:"last_seen_at,omitempty"`
+	NodeOnlineAt  int64    `json:"node_online_at,omitempty"`
 }
 
 const oneGB = 1024 * 1024 * 1024
@@ -258,6 +259,19 @@ func userOnlineFromStats(pass, deviceID string, isMain bool, stats *ServerStats)
 	return false
 }
 
+const remoteNodeOnlineMaxAge = 30 * time.Second
+
+func userOnline(pass, deviceID string, isMain bool, stats *ServerStats, nodeOnlineAt int64) bool {
+	if userOnlineFromStats(pass, deviceID, isMain, stats) {
+		return true
+	}
+	if nodeOnlineAt <= 0 {
+		return false
+	}
+	age := time.Since(time.Unix(nodeOnlineAt, 0))
+	return age >= 0 && age <= remoteNodeOnlineMaxAge
+}
+
 func gbStringToBytes(s string) int64 {
 	v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
 	if err != nil || v <= 0 {
@@ -284,6 +298,7 @@ func mainUserRow(db *PasswordsDB, stats *ServerStats, inbound WdttInboundConfig,
 	upBytes := int64(0)
 	downBytes := int64(0)
 	lastSeenAt := int64(0)
+	nodeOnlineAt := int64(0)
 	deviceIDs := []string{}
 	devicesBound := 0
 	var mainEntry *PasswordEntry
@@ -292,6 +307,7 @@ func mainUserRow(db *PasswordsDB, stats *ServerStats, inbound WdttInboundConfig,
 		upBytes = entry.UpBytes
 		downBytes = entry.DownBytes
 		lastSeenAt = entry.LastSeenAt
+		nodeOnlineAt = entry.NodeOnlineAt
 		normalizeEntryDevices(entry)
 		deviceIDs = append([]string(nil), entry.DeviceIDs...)
 		devicesBound = len(entry.DeviceIDs)
@@ -332,7 +348,7 @@ func mainUserRow(db *PasswordsDB, stats *ServerStats, inbound WdttInboundConfig,
 		"traffic_used_fmt": formatBytes(used),
 		"traffic_exceeded": false,
 		"active":           true,
-		"online":           userOnlineFromStats(db.MainPassword, strings.Join(deviceIDs, ", "), true, stats),
+		"online":           userOnline(db.MainPassword, strings.Join(deviceIDs, ", "), true, stats, nodeOnlineAt),
 		"last_seen_at":     lastSeenAt,
 		"ports":            ports,
 		"vk_hash":          vkHash,

@@ -163,6 +163,9 @@
             description='{{ i18n "secAlertSsl" }}' show-icon closable>
           </a-alert>
         <div class="console-heading"><div><h1>Панель управления</h1><p>Состояние сервера и подключений</p></div><a-button size="small" icon="reload" @click="getStatus">Обновить</a-button></div>
+        <a-alert v-if="updateNotice && updateNotice.update_available" type="warning" show-icon style="margin-bottom:16px" message="Доступна другая версия панели в GitHub main">
+          <template #description>Установлено: [[ updateNotice.current_commit.slice(0, 12) ]] · GitHub: [[ updateNotice.latest_commit.slice(0, 12) ]] <a @click="openSelectPanelVersion">Подробнее и команда обновления</a></template>
+        </a-alert>
         <a-row class="dashboard-grid" :gutter="isMobile ? 8 : 16">
               <a-col :span="24">
                 <div class="resource-grid">
@@ -361,8 +364,8 @@
   <a-modal id="panel-version-modal" v-model="panelVersionModal.visible" title='{{ i18n "pages.index.panelUpdate" }}'
     :closable="true" @ok="() => panelVersionModal.visible = false" :class="themeSwitcher.currentTheme" footer="">
     <a-spin :spinning="panelVersionModal.loading">
-      <a-alert v-if="panelVersionModal.status" :type="panelVersionModal.status.update_available ? 'warning' : 'success'" show-icon
-        :message="panelVersionModal.status.update_available ? 'Версия панели отличается от GitHub main' : 'Панель актуальна'" style="margin-bottom:12px"></a-alert>
+      <a-alert v-if="panelVersionModal.status" :type="!panelVersionModal.status.current_commit ? 'info' : (panelVersionModal.status.update_available ? 'warning' : 'success')" show-icon
+        :message="!panelVersionModal.status.current_commit ? 'Коммит сборки неизвестен — сравнение недоступно' : (panelVersionModal.status.update_available ? 'Версия панели отличается от GitHub main' : 'Коммит совпадает с GitHub main')" style="margin-bottom:12px"></a-alert>
       <div v-if="panelVersionModal.status">
         <p>Установлено: <b>[[ panelVersionModal.status.current_version ]]</b> <code>[[ (panelVersionModal.status.current_commit || 'коммит неизвестен').slice(0, 12) ]]</code></p>
         <p>GitHub main: <code>[[ panelVersionModal.status.latest_commit.slice(0, 12) ]]</code></p>
@@ -1095,6 +1098,7 @@
       processPollTimer: null,
       versionModal,
       panelVersionModal,
+      updateNotice: null,
       logModal,
       xraylogModal,
       backupModal,
@@ -1271,6 +1275,15 @@
           return;
         }
         panelVersionModal.show(msg.obj);
+      },
+      async checkPanelUpdateNotice() {
+        try {
+          const msg = await HttpUtil.get('/panel/api/server/getPanelVersion');
+          if (msg && msg.success) this.updateNotice = msg.obj;
+        } catch (e) {
+          // GitHub may be unavailable; this must not interrupt the dashboard.
+          console.warn('Проверка обновления недоступна');
+        }
       },
       copyPanelUpdateCommand() {
         const command = 'cd "$(cat /etc/wdtt/source-dir)" && sudo bash update.sh';
@@ -1621,6 +1634,10 @@
       const settingsPromise = HttpUtil.get('/panel/setting/defaultSettings');
       await this.getStatus();
       await this.getDashboardData();
+      this.checkPanelUpdateNotice();
+      this.updateNoticeTimer = setInterval(() => {
+        if (PagePollUtil.isVisible()) this.checkPanelUpdateNotice();
+      }, 6 * 60 * 60 * 1000);
       this.dashboardDataTimer = setInterval(() => {
         if (PagePollUtil.isVisible()) this.getDashboardData();
       }, 15000);

@@ -10,11 +10,12 @@
   .sub-brand { color:var(--sub-accent); font-size:12px; font-weight:800; letter-spacing:.16em; }
   .sub-header h1 { font-size:28px; font-weight:750; line-height:1.2; margin:3px 0 0; }
   .sub-panel { background:#fff; border:1px solid var(--sub-border); border-radius:16px; padding:22px; margin-bottom:12px; }
-  .sub-hero { display:grid; grid-template-columns:1fr auto; gap:20px; align-items:center; }
+  .sub-hero { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:20px; align-items:center; }
+  .sub-hero > div:first-child { min-width:0; }
   .sub-kicker { color:var(--sub-muted); font-size:12px; }
   .sub-id { font-size:20px; font-weight:700; margin:5px 0 12px; overflow-wrap:anywhere; }
   .sub-primary-link { display:flex; gap:8px; align-items:center; margin-top:15px; }
-  .sub-primary-link code { flex:1; min-width:0; padding:10px 12px; border:1px solid var(--sub-border); border-radius:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:inherit; }
+  .sub-primary-link code { flex:1; min-width:0; max-width:100%; padding:10px 12px; border:1px solid var(--sub-border); border-radius:8px; overflow-wrap:anywhere; word-break:break-word; color:inherit; }
   .sub-qr { border:1px solid var(--sub-border); border-radius:10px; padding:8px; background:#fff; cursor:pointer; }
   .sub-qr canvas { display:block; width:136px; height:136px; }
   .sub-section-title { font-size:15px; font-weight:700; margin:0 0 14px; }
@@ -24,14 +25,19 @@
   .sub-metric strong { display:block; font-size:16px; overflow-wrap:anywhere; }
   .sub-progress { height:6px; border-radius:99px; background:#3c3128; overflow:hidden; margin:16px 0 2px; }
   .sub-progress span { display:block; height:100%; border-radius:inherit; background:var(--sub-accent); }
-  .sub-link-row { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--sub-border); }
-  .sub-link-row:first-of-type { border-top:0; }
-  .sub-link-name { width:235px; flex:none; font-weight:650; overflow-wrap:anywhere; }
-  .sub-link-row code { flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:var(--sub-muted); }
-  .subscription-page.dark { --sub-border:#343a32; --sub-muted:#a4aaa0; background:#171917; }
+  .sub-node { border:1px solid var(--sub-border); border-radius:12px; margin-top:10px; overflow:hidden; }
+  .sub-node summary { cursor:pointer; padding:13px 15px; font-weight:700; overflow-wrap:anywhere; }
+  .sub-node[open] summary { border-bottom:1px solid var(--sub-border); }
+  .sub-node-body { padding:0 15px; }
+  .sub-link-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 0; border-top:1px solid var(--sub-border); }
+  .sub-link-row:first-child { border-top:0; }
+  .sub-link-name { flex:1; min-width:0; font-weight:650; overflow-wrap:anywhere; }
+  .sub-link-row code { flex:0 0 100%; min-width:0; max-width:100%; padding:9px; border:1px solid var(--sub-border); border-radius:8px; overflow-wrap:anywhere; word-break:break-word; white-space:normal; color:inherit; user-select:all; }
+  .subscription-page.dark { --sub-border:#343a32; --sub-muted:#a4aaa0; background:#171917; color:#e9ebe7; }
   .subscription-page.dark .sub-panel { background:#20231f; }
+  .subscription-page.dark h1, .subscription-page.dark h2, .subscription-page.dark h3, .subscription-page.dark strong { color:#e9ebe7; }
   .subscription-page.dark .sub-primary-link code, .subscription-page.dark .sub-metric { background:#252923; }
-  @media (max-width:650px) { .subscription-page .ant-layout-content { padding:14px 10px; } .sub-panel { padding:16px; } .sub-hero { grid-template-columns:1fr; } .sub-qr { width:max-content; } .sub-metrics { grid-template-columns:repeat(2,1fr); } .sub-link-name { width:auto; flex:1; } .sub-link-row code { display:none; } .sub-link-row .ant-btn { margin-left:auto; } }
+  @media (max-width:650px) { .subscription-page .ant-layout-content { padding:14px 10px; } .sub-panel { padding:16px; } .sub-hero { grid-template-columns:minmax(0,1fr); } .sub-primary-link { flex-wrap:wrap; } .sub-primary-link code { flex-basis:100%; } .sub-qr { width:max-content; } .sub-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 </style>
 {{ template "page/head_end" .}}
 {{ template "page/body_start" .}}
@@ -39,7 +45,7 @@
   <a-layout-content>
     <main class="sub-shell">
       <header class="sub-header">
-        <div><div class="sub-brand">WDTT / CONNECTION</div><h1>{{ i18n "subscription.title" }}</h1></div>
+        <div><div class="sub-brand">{{ projectName }}</div><h1>{{ i18n "subscription.title" }}</h1></div>
         <a-popover :overlay-class-name="themeSwitcher.currentTheme" title='{{ i18n "menu.settings" }}' placement="bottomRight" trigger="click">
           <template #content><a-space direction="vertical"><a-theme-switch-login></a-theme-switch-login><a-select v-model="lang" style="width:170px" @change="LanguageManager.setLanguage(lang)" :dropdown-class-name="themeSwitcher.currentTheme"><a-select-option v-for="l in LanguageManager.supportedLanguages" :key="l.value" :value="l.value">[[ l.name ]]</a-select-option></a-select></a-space></template>
           <a-button shape="circle" icon="setting" aria-label="Настройки"></a-button>
@@ -66,9 +72,12 @@
         <div v-if="app.totalByte > 0" class="sub-progress"><span :style="{ width: usagePercent + '%' }"></span></div>
         <div style="margin-top:12px;color:var(--sub-muted);font-size:12px">{{ i18n "remained" }}: [[ app.remained ]] · {{ i18n "lastOnline" }}: [[ app.lastOnlineMs ? IntlUtil.formatDate(app.lastOnlineMs) : '—' ]]</div>
       </section>
-      <section class="sub-panel" v-if="links.length">
+      <section class="sub-panel" v-if="nodeGroups.length">
         <h2 class="sub-section-title">Подключения</h2>
-        <div class="sub-link-row" v-for="(link, idx) in links" :key="idx"><div class="sub-link-name" :title="linkName(link, idx)">[[ linkName(link, idx) ]]</div><code :title="link">[[ link ]]</code><a-button size="small" icon="copy" @click="copy(link)">{{ i18n "copy" }}</a-button></div>
+        <details class="sub-node" v-for="(node, idx) in nodeGroups" :key="idx">
+          <summary>[[ node.name ]] · [[ node.apps.length ]] приложений</summary>
+          <div class="sub-node-body"><div class="sub-link-row" v-for="(item, appIndex) in node.apps" :key="appIndex"><div class="sub-link-name">[[ item.name ]]</div><a-button size="small" icon="copy" @click="copy(item.link)">{{ i18n "copy" }}</a-button><code>[[ item.link ]]</code></div></div>
+        </details>
       </section>
       <section class="sub-panel" v-else>Активных нод пока нет. Подключение появится после добавления сервера.</section>
     </main>

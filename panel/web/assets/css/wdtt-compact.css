@@ -7,7 +7,7 @@ body.dark .ant-layout-sider, body.dark .ant-sidebar .ant-layout-sider, body.dark
 .wdtt-side-brand > span:last-child { display:flex; flex-direction:column; line-height:1.2; }
 .wdtt-side-brand strong { font-size:18px; letter-spacing:.04em; }
 .wdtt-side-brand small { color:#889187; font-size:10px; letter-spacing:.16em; margin-top:3px; }
-.wdtt-side-mark { width:34px; height:34px; display:grid; place-items:center; flex:none; border-radius:11px; background:var(--wdtt-accent); color:#fff; font-size:20px; font-weight:800; }
+.wdtt-side-mark { width:34px; height:34px; display:block; flex:none; border-radius:50%; border:2px solid var(--wdtt-accent); background:var(--wdtt-accent-soft); }
 .wdtt-side-label { color:#7f8b7d; font-size:10px; font-weight:700; letter-spacing:.13em; margin:8px 22px 9px; }
 body.dark .ant-sidebar .ant-menu, body.dark .ant-drawer .ant-menu { background:transparent !important; border:0; padding:0 8px; }
 body.dark .ant-sidebar .ant-menu-item, body.dark .ant-drawer .ant-menu-item { height:38px; line-height:38px; margin:3px 0 !important; border-radius:10px; color:#c3c8c0; }
@@ -18,6 +18,11 @@ body.dark #app:not(.login-app):not(.subscription-page) .ant-card, body.dark #app
 body.dark #app:not(.login-app):not(.subscription-page) .ant-card:hover { border-color:#444d3e !important; }
 body.dark #app:not(.login-app):not(.subscription-page) .ant-card-head { background:transparent; min-height:43px; border-bottom:1px solid #30352e; }
 body.dark #app:not(.login-app):not(.subscription-page) .ant-card-head-title { color:#e9ebe7; font-weight:650; padding:10px 0; }
+body.dark #app h1, body.dark #app h2, body.dark #app h3, body.dark #app h4, body.dark #app h5, body.dark #app h6,
+body.dark .ant-modal h1, body.dark .ant-modal h2, body.dark .ant-modal h3, body.dark .ant-modal h4,
+body.dark .ant-modal-title { color:#e9ebe7; }
+body.dark #app .ant-card, body.dark #app .ant-card p, body.dark #app .ant-card strong { color:#e9ebe7; }
+body:not(.dark) .wdtt-side-brand { color:#252a25; }
 body.dark #app:not(.login-app):not(.subscription-page) .ant-card-body { padding:17px; }
 body.dark #app:not(.login-app):not(.subscription-page) .ant-table { background:transparent; }
 body.dark #app:not(.login-app):not(.subscription-page) .ant-table-thead > tr > th { background:#252923 !important; color:#9ba498; border-bottom:1px solid #333a31; }

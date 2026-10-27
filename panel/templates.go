@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -50,6 +51,12 @@ func initAssetsVer() {
 
 func initTemplates() error {
 	funcMap := template.FuncMap{
+		"projectName": func() string {
+			if name := strings.TrimSpace(os.Getenv("WDTT_PROJECT_NAME")); name != "" {
+				return name
+			}
+			return "WDTT"
+		},
 		"i18n": func(key string, params ...string) string {
 			return i18nWeb(key, params...)
 		},

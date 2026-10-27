@@ -67,7 +67,8 @@ func checkPanelUpdate(ctx context.Context) (panelUpdateStatus, error) {
 		return status, fmt.Errorf("GitHub вернул неверную версию ветки main")
 	}
 	status.LatestCommit = fields[0]
-	status.UpdateAvailable = status.CurrentCommit == "" || status.CurrentCommit != status.LatestCommit
+	// Without a build commit, the version cannot be compared reliably.
+	status.UpdateAvailable = gitCommitPattern.MatchString(status.CurrentCommit) && status.CurrentCommit != status.LatestCommit
 	status.CheckedAt = time.Now().Unix()
 	return status, nil
 }

@@ -20,6 +20,21 @@
     }
   });
   const rawTitles = (titlesEl?.value || '').split('\n').filter(Boolean);
+  const nodeGroups = [];
+  rawLinks.forEach((link, index) => {
+    const label = rawTitles[index] || '';
+    const separator = label.lastIndexOf(' · ');
+    const nodeName = separator >= 0 ? label.slice(0, separator).trim() : '';
+    const appName = separator >= 0 ? label.slice(separator + 3).trim() : label;
+    let group = nodeGroups[nodeGroups.length - 1];
+    // The server starts each node with its WDTT JSON link; do not merge
+    // distinct nodes just because they happen to have the same name.
+    if (!group || appName === 'WDTT JSON') {
+      group = { name: nodeName || 'Основная нода', apps: [] };
+      nodeGroups.push(group);
+    }
+    group.apps.push({ name: appName || 'Ссылка', link });
+  });
 
   const data = {
     sId: el.getAttribute('data-sid') || '',
@@ -125,6 +140,7 @@
       themeSwitcher,
       app: data,
       links: rawLinks,
+      nodeGroups,
       lang: '',
     },
     async mounted() {

@@ -47,6 +47,7 @@ type serverStatus struct {
 		ErrorMsg     string       `json:"errorMsg"`
 		ActiveUsers  int          `json:"activeUsers"`
 		Sessions     int          `json:"sessions"`
+		RawSessions  int          `json:"rawSessions"`
 		Iface        string       `json:"iface"`
 		MainPass     string       `json:"mainPassword"`
 		DownGB       string       `json:"downGB"`
@@ -61,8 +62,9 @@ type serverStatus struct {
 	TCPCount int       `json:"tcpCount"`
 	UDPCount int       `json:"udpCount"`
 	NetIO    struct {
-		Up   uint64 `json:"up"`
-		Down uint64 `json:"down"`
+		Up        uint64 `json:"up"`
+		Down      uint64 `json:"down"`
+		Available bool   `json:"available"`
 	} `json:"netIO"`
 	NetTraffic struct {
 		Sent uint64 `json:"sent"`
@@ -171,6 +173,7 @@ func collectServerStatus() *serverStatus {
 	s.Uptime = readOSUptime()
 	s.TCPCount, s.UDPCount = readConnCounts()
 	s.NetIO.Up, s.NetIO.Down = vpnTrafficSpeed()
+	s.NetIO.Available = vpnInterfacesAvailable()
 	if db, err := loadPasswordsCached(); err == nil && db != nil {
 		s.NetTraffic.Sent, s.NetTraffic.Recv = combinedTrafficTotals(db)
 	} else {
@@ -233,6 +236,7 @@ func fillWdttStatus(s *serverStatus) {
 			s.Wdtt.ActiveUsers = n
 		}
 		s.Wdtt.Sessions = stats.Sessions
+		s.Wdtt.RawSessions = stats.RawSessions
 	}
 	if db != nil {
 		up, down := passwordsTrafficTotals(db)
@@ -477,16 +481,21 @@ func readConnCounts() (tcp, udp int) {
 const vpnTrafficIface = "wdtt0"
 
 func vpnTrafficTotals() (sent, recv uint64) {
-	rx, tx := readIfaceBytes(vpnTrafficIface)
+	rx, tx := vpnInterfaceBytes()
 	// sent = upload клиента (rx на wg-интерфейсе), recv = download клиента (tx)
 	return rx, tx
 }
 
 func vpnTrafficSpeed() (up, down uint64) {
-	rx, tx := readIfaceBytes(vpnTrafficIface)
+	available := vpnInterfacesAvailable()
+	rx, tx := vpnInterfaceBytes()
 	now := time.Now()
 	statusMu.Lock()
 	defer statusMu.Unlock()
+	if !available {
+		hasVpnSample = false
+		return 0, 0
+	}
 	if hasVpnSample {
 		dt := now.Sub(lastVpnSampleT).Seconds()
 		if dt > 0 {
@@ -502,6 +511,42 @@ func vpnTrafficSpeed() (up, down uint64) {
 	lastVpnSampleT = now
 	hasVpnSample = true
 	return
+}
+
+func vpnInterfaceBytes() (rx, tx uint64) {
+	if !localNodeEnabled() {
+		return 0, 0
+	}
+	rawIface := strings.TrimSpace(os.Getenv("WDTT_RAW_IFACE"))
+	if rawIface == "" {
+		rawIface = "wdtt-raw"
+	}
+	rx, tx = readIfaceBytes(rawIface)
+	if rawIface != vpnTrafficIface {
+		wgRx, wgTx := readIfaceBytes(vpnTrafficIface)
+		rx += wgRx
+		tx += wgTx
+	}
+	return
+}
+
+func vpnInterfacesAvailable() bool {
+	if !localNodeEnabled() {
+		return false
+	}
+	rawIface := strings.TrimSpace(os.Getenv("WDTT_RAW_IFACE"))
+	if rawIface == "" {
+		rawIface = "wdtt-raw"
+	}
+	for _, iface := range []string{rawIface, vpnTrafficIface} {
+		if strings.ContainsAny(iface, `/\`) || iface == "." || iface == ".." {
+			continue
+		}
+		if _, err := os.Stat("/sys/class/net/" + iface); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func readIfaceBytes(iface string) (rx, tx uint64) {

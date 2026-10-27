@@ -126,6 +126,9 @@ func (a *App) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	}
 	nodes := make([]map[string]interface{}, 0)
 	nodesAvailable := false
+	var totalUpRate, totalDownRate uint64
+	measuredNodes := 0
+	onlineRemoteNodes := 0
 	if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
 		if list, err := m.ListNodes(r.Context()); err == nil {
 			nodesAvailable = true
@@ -135,10 +138,20 @@ func (a *App) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				active := n.IsActive && ((n.IsLocal && serviceActive(wdttServiceUnit)) || (!n.IsLocal && n.LastSeenAt > 0 && now-n.LastSeenAt <= 60))
+				if active && !n.IsLocal {
+					onlineRemoteNodes++
+				}
+				upRate, downRate, measured := clusterSpeeds.get(n.ID, time.Now())
+				if active && measured && !n.IsLocal {
+					totalUpRate += upRate
+					totalDownRate += downRate
+					measuredNodes++
+				}
 				nodes = append(nodes, map[string]interface{}{
 					"id": n.ID, "name": n.Name, "host": n.Host, "online": active,
 					"enabled": n.IsActive, "users": n.OnlineUsers, "last_seen": n.LastSeenAt,
 					"up": n.TrafficUp, "down": n.TrafficDown,
+					"speed_up": upRate, "speed_down": downRate, "speed_available": active && measured && !n.IsLocal,
 				})
 			}
 		}
@@ -146,6 +159,9 @@ func (a *App) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]interface{}{
 		"devices": dashboardDeviceCount(db), "users": len(db.Passwords), "online": online,
 		"nodes": nodes, "nodes_available": nodesAvailable,
+		"speed_up": totalUpRate, "speed_down": totalDownRate, "speed_nodes": measuredNodes,
+		"speed_expected": onlineRemoteNodes,
+		"local_enabled":  localNodeEnabled(),
 	})
 }
 

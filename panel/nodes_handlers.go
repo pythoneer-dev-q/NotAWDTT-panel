@@ -472,6 +472,9 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), 404)
 		return
 	}
+	if req.TrafficUpTotal != nil {
+		clusterSpeeds.record(node.ID, *req.TrafficUpTotal, *req.TrafficDownTotal, time.Now())
+	}
 
 	jsonOK(w, map[string]bool{"ok": true})
 }

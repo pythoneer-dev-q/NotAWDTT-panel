@@ -388,6 +388,7 @@ func loadServerStats() *ServerStats {
 		s.Online = nil
 		s.ActiveUsers = 0
 		s.Sessions = 0
+		s.RawSessions = 0
 	}
 	return &s
 }

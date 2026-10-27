@@ -1,0 +1,50 @@
+{{ template "page/head_start" . }}
+{{ template "page/head_end" . }}
+{{ template "page/body_start" . }}
+<a-layout id="app" v-cloak :class="themeSwitcher.currentTheme + ' api-page'">
+  <wdtt-sidebar></wdtt-sidebar>
+  <a-layout id="content-layout"><a-layout-content>
+    <div class="api-shell">
+      <header class="api-heading"><div><div class="api-eyebrow">ИНТЕГРАЦИИ</div><h1>REST API</h1><p>Подключайте ботов и управляйте панелью программно.</p></div></header>
+      <a-card title="Доступ к API">
+        <p>Ключ даёт права администратора. Передавайте его в заголовке <code>X-API-Key</code> и храните в секрете.</p>
+        <div class="api-key-row"><code>[[ revealed ? apiKey : '••••••••••••••••••••••••' ]]</code><a-button icon="eye" @click="revealKey" :loading="loading">[[ revealed ? 'Скрыть' : 'Показать' ]]</a-button><a-button icon="copy" @click="copyKey" :disabled="!apiKey">Копировать</a-button></div>
+        <a-alert v-if="error" type="error" :message="error" show-icon style="margin-top:12px"></a-alert>
+      </a-card>
+      <a-card title="Быстрый старт" style="margin-top:16px">
+        <p>Адрес API зависит от домена и настройки обратного прокси. Пример для этого адреса:</p>
+        <pre class="api-code">curl -H "X-API-Key: ВАШ_КЛЮЧ" "[[ origin ]]/api/users"</pre>
+        <p>Пользователи · ноды · VK-хеши · статус</p>
+        <a href="https://github.com/pythoneer-dev-q/NotAWDTT-panel/blob/main/docs/API.md" target="_blank" rel="noopener noreferrer">Документация API <a-icon type="link" /></a>
+      </a-card>
+    </div>
+  </a-layout-content></a-layout>
+</a-layout>
+<style>
+.api-shell { max-width:980px; margin:0 auto; }
+.api-heading { margin:0 0 24px; }
+.api-heading h1 { margin:4px 0; font-size:28px; font-weight:700; }
+.api-heading p { opacity:.65; margin:0; }
+.api-eyebrow { color:var(--wdtt-accent); font-size:11px; letter-spacing:.15em; font-weight:700; }
+.api-key-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.api-key-row code { flex:1 1 220px; min-width:0; padding:10px; border:1px solid rgba(var(--wdtt-accent-rgb),.25); border-radius:8px; overflow-wrap:anywhere; color:inherit; }
+.api-code { padding:14px; overflow-x:auto; border:1px solid rgba(var(--wdtt-accent-rgb),.25); border-radius:8px; color:inherit; background:rgba(127,127,127,.08); }
+</style>
+{{ template "page/body_scripts" . }}
+{{ template "component/aThemeSwitch" . }}
+{{ template "component/wdttSidebar" . }}
+<script>
+new Vue({ delimiters:['[[',']]'], el:'#app', data:{ themeSwitcher, apiKey:'', revealed:false, loading:false, error:'', origin:window.location.origin },
+  methods:{
+    async revealKey() {
+      if (this.revealed) { this.revealed=false; return; }
+      this.loading=true; this.error='';
+      try { const result=await HttpUtil.get('/panel/api/rest-credentials'); if (!result.success) throw new Error('API key unavailable'); this.apiKey=result.obj.api_key; this.revealed=true; }
+      catch (_) { this.error='Не удалось получить ключ. Проверьте сессию.'; }
+      finally { this.loading=false; }
+    },
+    copyKey() { ClipboardManager.copyText(this.apiKey).then(ok => this.$message[ok ? 'success' : 'error'](ok ? 'Ключ скопирован' : 'Не удалось скопировать')); }
+  }
+});
+</script>
+{{ template "page/body_end" . }}

@@ -30,25 +30,25 @@
   .index-page .console-heading h1 { margin:0; font-size:26px; font-weight:750; line-height:1.2; }
   .index-page .console-heading p { margin:5px 0 0; opacity:.55; }
   .index-page .resource-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
-  .index-page .resource-card { min-height:136px; border:1px solid #30352e; border-radius:17px; background:#20231f; padding:18px 20px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .index-page .resource-card { min-height:136px; border:1px solid rgba(var(--wdtt-accent-rgb),.15); border-radius:10px; background:#111; padding:18px 20px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
   .index-page .resource-card .resource-icon { width:36px; height:36px; border-radius:11px; display:grid; place-items:center; color:var(--wdtt-accent); background:var(--wdtt-accent-soft); font-size:17px; }
   .index-page .resource-card .resource-label { color:#a2aaa0; font-size:13px; margin:11px 0 3px; }
   .index-page .resource-card strong { display:block; font-size:25px; letter-spacing:-.03em; }
   .index-page .resource-card small { display:block; color:#889187; margin-top:4px; }
   .index-page .resource-card .ant-progress-text { color:#e9ebe7; font-size:12px; }
-  .index-page .resource-chart { margin-top:14px; border:1px solid #30352e; border-radius:17px; background:#20231f; padding:18px 20px 12px; }
+  .index-page .resource-chart { margin-top:14px; border:1px solid rgba(var(--wdtt-accent-rgb),.15); border-radius:10px; background:#111; padding:18px 20px 12px; }
   .index-page .resource-chart-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
   .index-page .resource-chart h2 { margin:0; font-size:15px; }
-  .index-page .data-section { margin:16px 0; padding:20px; border:1px solid var(--wdtt-border, #30352e); border-radius:16px; background:var(--wdtt-surface, #20231f); scroll-margin-top:16px; }
+  .index-page .data-section { margin:16px 0; padding:20px; border:1px solid var(--wdtt-border, rgba(var(--wdtt-accent-rgb),.15)); border-radius:10px; background:var(--wdtt-surface, #111); scroll-margin-top:16px; }
   .index-page .data-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:16px; }
   .index-page .data-header h2 { font-size:18px; margin:0; }
   .index-page .data-header p { margin:4px 0 0; opacity:.65; font-size:12px; }
   .index-page .data-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
-  .index-page .data-stat { padding:14px; border:1px solid var(--wdtt-border, #30352e); border-radius:12px; min-width:0; }
+  .index-page .data-stat { padding:14px; border:1px solid var(--wdtt-border, rgba(var(--wdtt-accent-rgb),.15)); border-radius:8px; min-width:0; }
   .index-page .data-stat span { display:block; opacity:.65; font-size:12px; }
   .index-page .data-stat strong { display:block; font-size:24px; margin-top:4px; }
   .index-page .data-nodes { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px; margin-top:14px; }
-  .index-page .data-node { border:1px solid var(--wdtt-border, #30352e); border-radius:12px; padding:14px; min-width:0; }
+  .index-page .data-node { border:1px solid var(--wdtt-border, rgba(var(--wdtt-accent-rgb),.15)); border-radius:8px; padding:14px; min-width:0; }
   .index-page .data-node-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .index-page .data-node-head strong { overflow-wrap:anywhere; }
   .index-page .data-node p { margin:8px 0 0; font-size:12px; opacity:.72; overflow-wrap:anywhere; }
@@ -189,6 +189,7 @@
                       <div class="data-node-head"><strong>[[ node.name || node.host || node.id ]]</strong><a-tag :color="node.online ? 'green' : 'default'">[[ node.online ? 'Онлайн' : (node.enabled ? 'Офлайн' : 'Выключена') ]]</a-tag></div>
                       <p>[[ node.host ]]</p><p>Онлайн пользователей: <b>[[ node.online ? node.users : '—' ]]</b></p>
                       <p>Трафик: ↓ [[ SizeFormatter.sizeFormat(node.down) ]] · ↑ [[ SizeFormatter.sizeFormat(node.up) ]]</p>
+                      <p>Скорость: [[ node.speed_available ? '↓ ' + SizeFormatter.sizeFormat(node.speed_down) + '/с · ↑ ' + SizeFormatter.sizeFormat(node.speed_up) + '/с' : 'нет данных' ]]</p>
                       <p>CPU и RAM ноды не передаются</p>
                     </div>
                   </div>
@@ -201,10 +202,9 @@
                     <div class="wdtt-head">
                       <span class="wdtt-brand">WDTT Core (RAW & UDP)</span>
                       <div class="wdtt-tags">
-                        <a-tag color="blue">Пользователи: [[ status.wdtt.activeUsers ]]</a-tag>
-                        <a-tag color="orange">RAW сессии: [[ status.wdtt.rawSessions || 0 ]]</a-tag>
-                        <a-tag color="cyan">UDP сессии: [[ Math.max(0, (status.wdtt.sessions || 0) - (status.wdtt.rawSessions || 0)) ]]</a-tag>
-                        <a-tag color="purple">Интерфейс: [[ status.wdtt.ifaceShort || 'wdtt-raw' ]]</a-tag>
+                        <a-tag color="blue">Локально онлайн: [[ dashboardData.local_enabled ? status.wdtt.activeUsers : '—' ]]</a-tag>
+                        <a-tag color="orange">RAW сессии: [[ dashboardData.local_enabled ? (status.wdtt.rawSessions || 0) : '—' ]]</a-tag>
+                        <a-tag color="cyan">Транспортные сессии: [[ dashboardData.local_enabled ? (status.wdtt.sessions || 0) : '—' ]]</a-tag>
                       </div>
                     </div>
                   </template>
@@ -259,11 +259,11 @@
               </a-col>
 
               <a-col :xs="24" :sm="24" :lg="12">
-                <a-card title='{{ i18n "pages.index.overallSpeed" }}' hoverable>
+                <a-card title="Скорость VPN" hoverable>
                   <a-row :gutter="isMobile ? [8,8] : 0">
                     <a-col :span="12">
                       <a-custom-statistic
-                        :value="SizeFormatter.sizeFormat(status.netIO.up)">
+                        :value="status.netIO.available || dashboardData.speed_nodes ? SizeFormatter.sizeFormat(status.netIO.up + (dashboardData.speed_up || 0)) : '—'">
                         <template #prefix>
                           <a-icon type="arrow-up" />
                         </template>
@@ -274,7 +274,7 @@
                     </a-col>
                     <a-col :span="12">
                       <a-custom-statistic
-                        :value="SizeFormatter.sizeFormat(status.netIO.down)">
+                        :value="status.netIO.available || dashboardData.speed_nodes ? SizeFormatter.sizeFormat(status.netIO.down + (dashboardData.speed_down || 0)) : '—'">
                         <template #prefix>
                           <a-icon type="arrow-down" />
                         </template>
@@ -284,6 +284,7 @@
                       </a-custom-statistic>
                     </a-col>
                   </a-row>
+                  <div style="margin-top:8px;opacity:.65;font-size:12px">Локальный VPN: [[ status.netIO.available ? 'измеряется' : 'нет данных' ]] · ноды: [[ dashboardData.speed_nodes || 0 ]] / [[ dashboardData.speed_expected || 0 ]]</div>
                 </a-card>
               </a-col>
               <a-col :xs="24" :sm="24" :lg="12">
@@ -338,23 +339,24 @@
                 </a-card>
               </a-col>
               <a-col :xs="24" :sm="24" :lg="12">
-                <a-card title='{{ i18n "pages.index.connectionCount" }}' hoverable>
+                <a-card title="Локальные VPN-соединения" hoverable>
                   <a-row :gutter="isMobile ? [8,8] : 0">
                     <a-col :span="12">
-                      <a-custom-statistic title="TCP" :value="status.tcpCount">
+                      <a-custom-statistic title="Транспортные" :value="dashboardData.local_enabled ? status.wdtt.sessions : '—'">
                         <template #prefix>
                           <a-icon type="swap" />
                         </template>
                       </a-custom-statistic>
                     </a-col>
                     <a-col :span="12">
-                      <a-custom-statistic title="UDP" :value="status.udpCount">
+                      <a-custom-statistic title="RAW" :value="dashboardData.local_enabled ? status.wdtt.rawSessions : '—'">
                         <template #prefix>
                           <a-icon type="swap" />
                         </template>
                       </a-custom-statistic>
                     </a-col>
                   </a-row>
+                  <div style="margin-top:8px;opacity:.65;font-size:12px">Удалённые ноды: число пользователей онлайн показано в разделе «Данные».</div>
                 </a-card>
               </a-col>
             </a-row>
@@ -820,7 +822,7 @@
       this.disk = new CurTotal(0, 0);
       this.loads = [0, 0, 0];
       this.mem = new CurTotal(0, 0);
-      this.netIO = { up: 0, down: 0 };
+      this.netIO = { up: 0, down: 0, available: false };
       this.netTraffic = { sent: 0, recv: 0 };
       this.publicIP = { ipv4: 0, ipv6: 0 };
       this.swap = new CurTotal(0, 0);
@@ -1085,7 +1087,7 @@
         spinning: false
       },
       status: new Status(),
-      dashboardData: { users: '—', online: '—', devices: '—', nodes: [], nodes_available: false },
+      dashboardData: { users: '—', online: '—', devices: '—', nodes: [], nodes_available: false, local_enabled: false, speed_nodes: 0 },
       dashboardDataError: '',
       dashboardDataLoading: false,
   cpuHistory: [], // small live widget history

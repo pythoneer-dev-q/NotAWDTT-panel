@@ -69,6 +69,7 @@ func Run() error {
 	mux.HandleFunc(base+"panel/", app.serveDashboard)
 	mux.HandleFunc(base+"panel/nodes", app.serveNodesPage)
 	mux.HandleFunc(base+"panel/users", app.serveUsersPage)
+	mux.HandleFunc(base+"panel/rest-api", app.serveRestAPIPage)
 	mux.HandleFunc(base+"panel/connections", app.serveConnectionsPage)
 	mux.HandleFunc(base+"panel/xray", app.serveXrayPage)
 	mux.HandleFunc(base+"panel/settings", app.serveSettingsPage)
@@ -90,6 +91,7 @@ func Run() error {
 	api := base + "panel/api/"
 	mux.HandleFunc(api+"status", app.requireAuthCSRF(app.handleStatus))
 	mux.HandleFunc(api+"dashboard-data", app.requireAuthCSRF(app.handleDashboardData))
+	mux.HandleFunc(api+"rest-credentials", app.requireAuthCSRF(app.handleRestCredentials))
 	mux.HandleFunc(api+"inbound", app.requireAuthCSRF(app.handleInboundGet))
 	mux.HandleFunc(api+"inbound/save", app.requireAuthCSRF(app.handleInboundSave))
 	mux.HandleFunc(api+"firewall/ports", app.requireAuthCSRF(app.handleFirewallPortsList))
@@ -184,6 +186,23 @@ func (a *App) serveUsersPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.renderHTML(w, r, "users.html", "Пользователи", nil)
+}
+
+func (a *App) serveRestAPIPage(w http.ResponseWriter, r *http.Request) {
+	if a.parseSession(r) == nil {
+		http.Redirect(w, r, a.cfg.basePath(), http.StatusFound)
+		return
+	}
+	a.renderHTML(w, r, "rest-api.html", "REST API", nil)
+}
+
+func (a *App) handleRestCredentials(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	jsonOK(w, map[string]string{"api_key": a.cfg.ApiKey})
 }
 
 func (a *App) serveSettingsPage(w http.ResponseWriter, r *http.Request) {

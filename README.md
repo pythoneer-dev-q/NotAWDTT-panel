@@ -1,9 +1,4 @@
-# WDTT
-
-[![Build and tests](https://github.com/pythoneer-dev-q/NotAWDTT-panel/actions/workflows/build-server.yml/badge.svg)](https://github.com/pythoneer-dev-q/NotAWDTT-panel/actions/workflows/build-server.yml)
-[![Latest release](https://img.shields.io/github/v/release/pythoneer-dev-q/NotAWDTT-panel)](https://github.com/pythoneer-dev-q/NotAWDTT-panel/releases/latest)
-
-[![Поддержать WDTT](https://devgamemaga.mooo.com:9443/b/soft.svg)](https://devgamemaga.mooo.com:9443/donate)
+# NotAWDTT-panel
 
 VPN на VPS через медиарелеи ВК (TURN / RAW UDP) с современной веб-панелью в стиле **Remnawave**, поддержкой **MongoDB**, многонодовых кластеров и полноценным **RESTful API**.
 

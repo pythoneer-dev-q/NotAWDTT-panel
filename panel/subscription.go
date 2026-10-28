@@ -329,7 +329,11 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request) {
 	inbound, _ := loadWdttInbound()
 	linkHost := a.resolveLinkHost(inbound)
 	subURL := a.buildSubURL(info.Entry.SubID)
-	link, err := buildWdttShareLink(linkHost, info.Password, info.Email, a.cfg.SubTitle, "", info.Entry.VkHash, info.Entry, inbound, subURL)
+	localNodeTitle := strings.TrimSpace(inbound.Remark)
+	if localNodeTitle == "" {
+		localNodeTitle = linkHost
+	}
+	link, err := buildWdttShareLink(linkHost, info.Password, localNodeTitle, a.cfg.SubTitle, "", info.Entry.VkHash, info.Entry, inbound, subURL)
 	if err != nil {
 		http.Error(w, "failed to build link", http.StatusInternalServerError)
 		return
@@ -363,14 +367,14 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request) {
 				nodeInbound.RawDirectPort = n.RawPort
 				nodeEntry := *info.Entry
 				nodeEntry.Ports = "" // node endpoints override primary-server user port defaults
-				nodeTitle := n.Name
+				nodeTitle := strings.TrimSpace(n.Name)
 				if nodeTitle == "" {
-					nodeTitle = a.cfg.SubTitle
+					nodeTitle = h
 				}
-				if nl, err := buildWdttShareLink(h, info.Password, info.Email, nodeTitle, "", info.Entry.VkHash, &nodeEntry, nodeInbound, subURL); err == nil && nl != "" {
+				if nl, err := buildWdttShareLink(h, info.Password, nodeTitle, nodeTitle, "", info.Entry.VkHash, &nodeEntry, nodeInbound, subURL); err == nil && nl != "" {
 					allLinks = append(allLinks, nl)
 					if wantsHTML {
-						links, titles, err := buildAllSubscriptionLinks(h, info.Password, info.Email, nodeTitle, &nodeEntry, nodeInbound, subURL)
+						links, titles, err := buildAllSubscriptionLinks(h, info.Password, nodeTitle, nodeTitle, &nodeEntry, nodeInbound, subURL)
 						if err == nil {
 							appLinks = append(appLinks, links...)
 							for _, title := range titles {
@@ -393,7 +397,7 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request) {
 		}
 		allLinks = []string{link}
 		if wantsHTML {
-			appLinks, appTitles, _ = buildAllSubscriptionLinks(linkHost, info.Password, info.Email, a.cfg.SubTitle, info.Entry, inbound, subURL)
+			appLinks, appTitles, _ = buildAllSubscriptionLinks(linkHost, info.Password, localNodeTitle, a.cfg.SubTitle, info.Entry, inbound, subURL)
 		}
 	}
 
@@ -492,7 +496,7 @@ func (a *App) serveSubInfoPage(w http.ResponseWriter, r *http.Request, subID str
 		"datepicker":   "gregorian",
 		"result":       links,
 		"linkTitles":   linkTitles,
-		"appearance":   subscriptionPageAppearance(),
+		"appearance":   loadSubscriptionAppearance(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := htmlTemplates.ExecuteTemplate(w, "subscription.html", data); err != nil {

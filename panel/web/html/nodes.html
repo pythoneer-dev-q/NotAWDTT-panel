@@ -77,20 +77,10 @@
         <a-alert v-if="!securePanel" type="warning" show-icon style="margin-bottom:12px" message="Для подключения VPS-ноды откройте панель по HTTPS"><template slot="description">Настройте сертификат в <a :href="basePath + 'panel/settings'">настройках панели</a>, затем скопируйте команду установки.</template></a-alert>
         <a-row :gutter="[16, 16]">
           <a-col :span="24">
-            <a-card hoverable>
-              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-                <div>
-                  <h2 style="margin:0; font-weight:700;"><a-icon type="cloud-server" style="color:var(--wdtt-accent);margin-right:8px"></a-icon>Кластер VPS-нод</h2>
-                  <div class="text-muted" style="margin-top:4px;">
-                    Подключайте удалённые серверы и генерируйте конфигурации с разных локаций через единую панель
-                  </div>
-                </div>
-                <a-space>
-                  <a-button icon="reload" @click="fetchNodes()" :loading="loading">Обновить</a-button>
-                  <a-button type="primary" icon="plus" @click="openAddModal">Добавить ноду</a-button>
-                </a-space>
-              </div>
-            </a-card>
+            <div class="console-heading">
+              <div><h1>Узлы</h1><p>Подключение и управление серверами</p></div>
+              <a-space><a-button icon="reload" @click="fetchNodes()" :loading="loading">Обновить</a-button><a-button type="primary" icon="plus" @click="openAddModal">Добавить ноду</a-button></a-space>
+            </div>
           </a-col>
 
           <!-- Статистика кластера -->

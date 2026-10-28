@@ -20,7 +20,13 @@
           </a-row>
           <a-row :gutter="[isMobile ? 8 : 16, isMobile ? 0 : 12]" v-else>
             <a-col>
-              <a-card title="Пользователи WDTT" hoverable>
+              <div class="console-heading"><div><h1>Пользователи</h1><p>Управление доступом и подписками</p></div><a-button type="primary" icon="plus" @click="openAddModal">Добавить</a-button></div>
+              <div class="users-summary">
+                <div><span>Всего пользователей</span><strong>[[ userCounts.all ]]</strong></div>
+                <div><span>Активные</span><strong>[[ activeCount ]]</strong></div>
+                <div><span>Заблокированные</span><strong>[[ blockedCount ]]</strong></div>
+              </div>
+              <a-card title="Список пользователей" class="users-list-card">
                 <template #extra>
                   <a-button-group>
                     <a-button icon="sync" @click="manualRefresh" :loading="refreshing"></a-button>
@@ -45,11 +51,6 @@
                   </a-button-group>
                 </template>
                 <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px">
-                  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                    <a-button type="primary" icon="plus" @click="openAddModal">
-                      Добавить пользователя
-                    </a-button>
-                  </div>
                   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
                     <a-radio-group v-model="statusFilter" button-style="solid" size="small">
                       <a-radio-button value="all">Все ([[ userCounts.all ]])</a-radio-button>
@@ -182,6 +183,7 @@
                   <span class="text-muted">Показано [[ users.length ]] из [[ usersTotal ]]</span>
                   <a-button icon="down" :loading="loadingMore" @click="loadMoreUsers">Загрузить ещё 100</a-button>
                 </div>
+                <div v-if="nextUsersOffset > 100 && isRefreshEnabled" class="text-muted" style="text-align:center;margin-top:8px;font-size:12px">Автообновление приостановлено, чтобы сохранить загруженные страницы. Обновите список кнопкой сверху.</div>
               </a-card>
             </a-col>
           </a-row>
@@ -357,7 +359,7 @@
           if (!payload || payload.usersRev === undefined) return;
           const rev = Number(payload.usersRev) || 0;
           if (this.usersRev && rev > this.usersRev) {
-            this.loadUsers().catch(console.error);
+            if (this.nextUsersOffset <= 100 && !this.loadingMore) this.loadUsers().catch(console.error);
           }
           this.usersRev = rev;
         });
@@ -474,7 +476,7 @@
         }, 500);
       },
       async loadMoreUsers() {
-        if (this.loadingMore || this.nextUsersOffset >= this.usersTotal) return;
+        if (this.loadingMore || this.refreshing || this.nextUsersOffset >= this.usersTotal) return;
         const requestId = this.usersRequestId;
         const offset = this.nextUsersOffset;
         this.loadingMore = true;
@@ -540,7 +542,7 @@
       },
       async startDataRefreshLoop() {
         while (this.isRefreshEnabled) {
-          if (PagePollUtil.isVisible()) {
+          if (PagePollUtil.isVisible() && this.nextUsersOffset <= 100 && !this.loadingMore) {
             try {
               await this.loadUsers();
             } catch (e) {

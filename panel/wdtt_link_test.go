@@ -64,3 +64,24 @@ func TestBuildAllSubscriptionLinks(t *testing.T) {
 		}
 	}
 }
+
+func TestSubscriptionLinksUseNodeName(t *testing.T) {
+	entry := &PasswordEntry{Comment: "user comment", VkHash: "abc123"}
+	inbound := WdttInboundConfig{ServerHost: "example.org", DtlsPort: 56000, WgPort: 56001, ClientPort: 9000}
+	links, titles, err := buildAllSubscriptionLinks("example.org", "password", "node-nl", "node-nl", entry, inbound, "https://example.org/sub/id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, title := range titles {
+		if strings.HasPrefix(title, "iOS") && !strings.HasSuffix(links[i], "#node-nl") {
+			t.Fatalf("wrong node remark: %s", links[i])
+		}
+	}
+	payload, err := decodeWdttShareLink(links[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.Name != "node-nl" {
+		t.Fatalf("wrong node name: %+v", payload)
+	}
+}

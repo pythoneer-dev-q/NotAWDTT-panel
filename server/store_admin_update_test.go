@@ -14,9 +14,20 @@ func setupStoreAdminPanelDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dir := t.TempDir()
 	oldPath := panelDBPath
+	// Earlier tests may have cached a failed connection to the default path.
+	// Point this test at its own database and reset that singleton first.
+	if serverPanelDB != nil {
+		_ = serverPanelDB.Close()
+	}
+	serverPanelDB = nil
+	serverPanelDBErr = nil
+	serverPanelDBOnce = sync.Once{}
 	panelDBPath = filepath.Join(dir, "panel.db")
 	t.Cleanup(func() {
 		panelDBPath = oldPath
+		if serverPanelDB != nil {
+			_ = serverPanelDB.Close()
+		}
 		serverPanelDB = nil
 		serverPanelDBErr = nil
 		serverPanelDBOnce = sync.Once{}
@@ -204,14 +215,14 @@ func TestApplyPanelUserUpdateRenamesWithManageDevices(t *testing.T) {
 	active := true
 	devs := []string{"dev1"}
 	err := applyPanelUserUpdateLocked(nil, panelUserUpdateReq{
-		OldPassword: "oldpass",
-		Password:    "newpass",
-		DeviceIDs:   &devs,
-		MaxDevices:  2,
-		Comment:     "u1",
-		Active:      &active,
-		VkHash:      "hashA",
-		Ports:       "56000,56001,9000",
+		OldPassword:    "oldpass",
+		Password:       "newpass",
+		DeviceIDs:      &devs,
+		MaxDevices:     2,
+		Comment:        "u1",
+		Active:         &active,
+		VkHash:         "hashA",
+		Ports:          "56000,56001,9000",
 		UseCustomPorts: true,
 	}, true)
 	dbMutex.Unlock()

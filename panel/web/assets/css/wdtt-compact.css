@@ -57,3 +57,38 @@ body.dark .ant-input:focus, body.dark .ant-select-focused .ant-select-selection 
   #app:not(.login-app):not(.subscription-page) #content-layout > .ant-layout-content { padding:14px; }
   #app:not(.login-app):not(.subscription-page) .ant-card-head { padding-left:14px; padding-right:14px; }
 }
+
+/* Consistent console surfaces for forms, tables, drawers and dialogs. */
+body.dark #app:not(.login-app):not(.subscription-page) .ant-collapse,
+body.dark #app:not(.login-app):not(.subscription-page) .ant-table,
+body.dark .ant-modal-content, body.dark .ant-modal-header,
+body.dark .ant-dropdown-menu, body.dark .ant-select-dropdown {
+  background:#1e1f1d; color:#e9ebe7; border-color:#30322f;
+}
+body.dark #app:not(.login-app):not(.subscription-page) .ant-collapse > .ant-collapse-item { border-color:#30322f; }
+body.dark #app:not(.login-app):not(.subscription-page) .ant-collapse-header,
+body.dark #app:not(.login-app):not(.subscription-page) .ant-form-item-label > label,
+body.dark .ant-modal-title, body.dark .ant-dropdown-menu-item { color:#e9ebe7 !important; }
+body.dark #app:not(.login-app):not(.subscription-page) .ant-collapse-content { background:#1b1c1a; color:#d5d8d2; border-color:#30322f; }
+body.dark #app:not(.login-app):not(.subscription-page) .ant-input,
+body.dark #app:not(.login-app):not(.subscription-page) .ant-input-number,
+body.dark #app:not(.login-app):not(.subscription-page) .ant-select-selection {
+  background:#252725; color:#f4f4f5; border-color:#353834; border-radius:8px;
+}
+body.dark #app:not(.login-app):not(.subscription-page) .ant-btn:not(.ant-btn-primary):not(.ant-btn-link) {
+  background:#252725; color:#e9ebe7; border-color:#353834; border-radius:8px;
+}
+body.dark #app:not(.login-app):not(.subscription-page) .ant-table-tbody > tr:hover > td { background:#272a26 !important; }
+body.dark #app:not(.login-app):not(.subscription-page) .ant-tabs-bar { border-color:#30322f; }
+body.dark .ant-modal-footer { border-color:#30322f; }
+#app:not(.login-app):not(.subscription-page) .console-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-bottom:18px; margin-bottom:20px; border-bottom:1px solid rgba(127,127,127,.2); }
+#app:not(.login-app):not(.subscription-page) .console-heading h1 { margin:0; font-size:28px; line-height:1.2; font-weight:700; letter-spacing:-.03em; }
+#app:not(.login-app):not(.subscription-page) .console-heading p { margin:7px 0 0; color:#999f98; }
+@media (max-width:600px) { #app:not(.login-app):not(.subscription-page) .console-heading { align-items:flex-start; } #app:not(.login-app):not(.subscription-page) .console-heading h1 { font-size:23px; } }
+.users-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-bottom:16px; }
+#app.nodes-page #content-layout > .ant-layout-content, #app.users-page #content-layout > .ant-layout-content { margin:0; }
+.users-summary > div { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:20px; border:1px solid rgba(127,127,127,.18); border-radius:var(--wdtt-radius); }
+body.dark .users-summary > div { background:#1e1f1d; }
+.users-summary span { color:#a1a6a0; font-size:14px; }
+.users-summary strong { font-size:26px; line-height:1; }
+@media (max-width:650px) { .users-summary { gap:8px; } .users-summary > div { padding:12px; display:block; } .users-summary strong { display:block; margin-top:8px; font-size:21px; } .users-summary span { font-size:12px; } }

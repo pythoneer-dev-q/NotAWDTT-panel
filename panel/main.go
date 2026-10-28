@@ -115,6 +115,7 @@ func Run() error {
 	mux.HandleFunc(api+"xray-inbounds/save", app.requireAuthCSRF(app.handleXrayInboundSave))
 	mux.HandleFunc(api+"xray-inbounds/delete", app.requireAuthCSRF(app.handleXrayInboundDelete))
 	mux.HandleFunc(api+"users", app.requireAuthCSRF(app.handleUsersList))
+	mux.HandleFunc(api+"sub-appearance", app.requireAuthCSRF(app.handleSubAppearance))
 	mux.HandleFunc(api+"users/add", app.requireAuthCSRF(app.handleUserAdd))
 	mux.HandleFunc(api+"users/update", app.requireAuthCSRF(app.handleUserUpdate))
 	mux.HandleFunc(api+"users/reset-traffic", app.requireAuthCSRF(app.handleUserResetTraffic))

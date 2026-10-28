@@ -1,5 +1,28 @@
 {{define "settings/panel/subscription"}}
 <a-collapse default-active-key="1">
+  <a-collapse-panel key="appearance" header="Конструктор страницы подписки">
+    <p>Изменения применяются после сохранения. Цвета фона, карточек и текста можно оставить пустыми, чтобы использовать выбранную тему.</p>
+    <a-row :gutter="16">
+      <a-col :xs="24" :md="12"><a-form-item label="Акцентный цвет"><a-input v-model="subAppearance.color" placeholder="#f46b17"></a-input></a-form-item></a-col>
+      <a-col :xs="24" :md="12"><a-form-item label="Тема"><a-select v-model="subAppearance.theme"><a-select-option value="auto">Как у устройства</a-select-option><a-select-option value="dark">Тёмная</a-select-option><a-select-option value="light">Светлая</a-select-option></a-select></a-form-item></a-col>
+      <a-col :xs="24" :md="8"><a-form-item label="Фон"><a-input v-model="subAppearance.background" placeholder="#101010"></a-input></a-form-item></a-col>
+      <a-col :xs="24" :md="8"><a-form-item label="Карточки"><a-input v-model="subAppearance.surface" placeholder="#202020"></a-input></a-form-item></a-col>
+      <a-col :xs="24" :md="8"><a-form-item label="Текст"><a-input v-model="subAppearance.text" placeholder="#ffffff"></a-input></a-form-item></a-col>
+      <a-col :xs="24" :md="8"><a-form-item label="Скругление"><a-input-number v-model="subAppearance.radius" :min="0" :max="32"></a-input-number></a-form-item></a-col>
+      <a-col :xs="24" :md="16"><a-form-item label="Логотип (HTTPS URL)"><a-input v-model="subAppearance.logo" placeholder="https://example.com/logo.png"></a-input></a-form-item></a-col>
+      <a-col :xs="24"><a-form-item label="Заголовок"><a-input v-model="subAppearance.heading" placeholder="Ваша подписка"></a-input></a-form-item></a-col>
+      <a-col :xs="24"><a-form-item label="Инструкция"><a-textarea v-model="subAppearance.instruction" :rows="4" placeholder="Как подключиться к сервису"></a-textarea></a-form-item></a-col>
+    </a-row>
+    <div :style="{ padding: '20px', marginBottom: '16px', background: subAppearance.background || (subAppearance.theme === 'light' ? '#f5f5f5' : '#101010'), color: subAppearance.text || (subAppearance.theme === 'light' ? '#202020' : '#f5f5f5'), borderRadius: subAppearance.radius + 'px' }">
+      <img v-if="subAppearance.logo" :src="subAppearance.logo" alt="" style="max-width: 100px; max-height: 48px; object-fit: contain">
+      <div :style="{marginTop: '12px', padding: '16px', background: subAppearance.surface || (subAppearance.theme === 'light' ? '#fff' : '#202020'), borderRadius: subAppearance.radius + 'px'}">
+        <h3 :style="{color: 'inherit'}">[[ subAppearance.heading || 'Ваша подписка' ]]</h3>
+        <p>[[ subAppearance.instruction || 'Выберите сервер и приложение для подключения.' ]]</p>
+        <span :style="{display: 'inline-block', padding: '8px 14px', color: '#fff', background: subAppearance.color, borderRadius: subAppearance.radius + 'px'}">Подключиться</span>
+      </div>
+    </div>
+    <a-button type="primary" @click="saveSubAppearance">Сохранить оформление</a-button>
+  </a-collapse-panel>
   <a-collapse-panel key="1" header='{{ i18n "pages.settings.subSettings"}}'>
     <a-setting-list-item paddings="small">
       <template #title>{{ i18n "pages.settings.subEnable"}}</template>
@@ -102,7 +125,6 @@
     </a-setting-list-item>
     <a-alert type="info" show-icon :style="{ marginTop: '12px' }"
       message="После изменения порта или TLS перезапустите панель. URL подписки: https://домен:порт/sub/{subId}"></a-alert>
-    <a-alert type="info" show-icon :style="{ marginTop: '12px' }" message="Оформление страницы подписки" description="Цвет, тема, скругление, логотип, заголовок и инструкция задаются переменными WDTT_SUB_PAGE_* в /etc/wdtt/.env. Откройте sudo wdtt env и перезапустите панель."></a-alert>
   </a-collapse-panel>
 </a-collapse>
 {{end}}

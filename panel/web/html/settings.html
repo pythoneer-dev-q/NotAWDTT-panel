@@ -41,7 +41,7 @@
               </a-card>
             </a-col>
             <a-col>
-              <a-tabs default-active-key="1">
+              <a-tabs default-active-key="1" @change="onSettingsTabChange">
                 <a-tab-pane key="1" :style="{ paddingTop: '20px' }">
                   <template #tab>
                     <a-icon type="setting"></a-icon>
@@ -211,6 +211,8 @@
     el: '#app',
     data: {
       themeSwitcher,
+      vkCreatorLoaded: false,
+      subAppearance: { color: '#f46b17', theme: 'auto', radius: 16, logo: '', background: '', surface: '', text: '', heading: '', instruction: '' },
       accentColor: WdttAccent.get(),
       accentOptions: [
         { key: 'orange', label: 'Оранжевый', color: '#f46b17' },
@@ -340,6 +342,21 @@
       },
     },
     methods: {
+      async onSettingsTabChange(key) {
+        if (String(key) === '4' && !this.vkCreatorLoaded) {
+          this.vkCreatorLoaded = true;
+          await this.loadVkCreator();
+        }
+      },
+      async loadSubAppearance() {
+        const msg = await HttpUtil.get('/panel/api/sub-appearance');
+        if (msg && msg.success) this.subAppearance = Object.assign({}, this.subAppearance, msg.obj);
+      },
+      async saveSubAppearance() {
+        const msg = await HttpUtil.post('/panel/api/sub-appearance', this.subAppearance);
+        if (msg && msg.success) this.$message.success('Оформление подписки сохранено');
+        else this.$message.error((msg && msg.msg) || 'Не удалось сохранить оформление');
+      },
       selectAccent(color) {
         this.accentColor = WdttAccent.set(color);
       },
@@ -929,8 +946,8 @@
     },
     async mounted() {
       await this.getAllSetting();
+      await this.loadSubAppearance();
       await this.loadCerts();
-      await this.loadVkCreator();
       while (true) {
         await PromiseUtil.sleep(500);
         this.saveBtnDisable = this.oldAllSetting.equals(this.allSetting);

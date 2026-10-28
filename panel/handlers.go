@@ -241,6 +241,12 @@ func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
 			a.handleMongoUsersPage(w, r, m)
 			return
 		}
+		if panelDBEnabled() {
+			a.handleSQLiteUsersPage(w, r)
+			return
+		}
+		jsonError(w, "user database unavailable", http.StatusServiceUnavailable)
+		return
 	}
 	// Подтянуть live vk_calls / снять finishing; ручные хеши не затираем (#23).
 	reconcileUserSessionFields()

@@ -1,0 +1,36 @@
+{{ template "page/head_start" . }}
+{{ template "page/head_end" . }}
+{{ template "page/body_start" . }}
+<a-layout id="app" v-cloak :class="themeSwitcher.currentTheme + ' data-page'">
+  <wdtt-sidebar></wdtt-sidebar><a-layout id="content-layout"><a-layout-content>
+    <header class="data-heading"><div><h1>Данные</h1><p>Пользователи, устройства и состояние серверов</p></div><a-button icon="reload" :loading="loading" @click="load">Обновить</a-button></header>
+    <a-alert v-if="error" type="error" :message="error" show-icon style="margin-bottom:16px"></a-alert>
+    <div class="data-grid">
+      <a-card><div class="data-label">Пользователи</div><strong>[[ data.users ]]</strong></a-card>
+      <a-card><div class="data-label">Сейчас онлайн</div><strong>[[ data.online ]]</strong></a-card>
+      <a-card><div class="data-label">Устройства</div><strong>[[ data.devices ]]</strong></a-card>
+      <a-card><div class="data-label">Ноды онлайн</div><strong>[[ data.nodes_available ? data.nodes.filter(n => n.online).length + ' / ' + data.nodes.length : '—' ]]</strong></a-card>
+    </div>
+    <div class="data-title"><h2>Ноды</h2><a :href="basePath + 'panel/nodes'">Управление <a-icon type="arrow-right" /></a></div>
+    <div class="data-node-grid"><a-card v-for="node in data.nodes" :key="node.id">
+      <div class="data-node-head"><strong>[[ node.name || node.host || node.id ]]</strong><a-tag :color="node.online ? 'green' : 'default'">[[ node.online ? 'Онлайн' : (node.enabled ? 'Офлайн' : 'Выключена') ]]</a-tag></div>
+      <p>[[ node.host ]]</p><p>Пользователи онлайн: [[ node.online ? node.users : '—' ]]</p>
+      <p>Трафик: ↓ [[ SizeFormatter.sizeFormat(node.down) ]] · ↑ [[ SizeFormatter.sizeFormat(node.up) ]]</p>
+      <p>Скорость: [[ node.speed_available ? '↓ ' + SizeFormatter.sizeFormat(node.speed_down) + '/с · ↑ ' + SizeFormatter.sizeFormat(node.speed_up) + '/с' : 'нет данных' ]]</p>
+    </a-card></div><p v-if="!data.nodes.length" class="data-muted">[[ data.nodes_available ? 'Ноды ещё не добавлены' : 'Нет данных о нодах' ]]</p>
+  </a-layout-content></a-layout>
+</a-layout>
+<style>
+.data-heading,.data-title,.data-node-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.data-heading { margin-bottom:20px; }.data-heading h1 { margin:0; font-size:26px; }.data-heading p,.data-muted,.data-node-grid p { opacity:.65; margin:4px 0; }
+.data-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }.data-grid strong { display:block; font-size:28px; margin-top:8px; }.data-label { opacity:.65; }
+.data-title { margin:24px 0 14px; }.data-title h2 { margin:0; }.data-node-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:14px; }.data-node-head strong { overflow-wrap:anywhere; }
+@media(max-width:700px){ .data-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.data-node-grid { grid-template-columns:1fr; } }
+</style>
+{{ template "page/body_scripts" . }}
+{{ template "component/aThemeSwitch" . }}
+{{ template "component/wdttSidebar" . }}
+<script>
+new Vue({delimiters:['[[',']]'],el:'#app',data:{themeSwitcher,basePath,loading:false,error:'',data:{users:'—',online:'—',devices:'—',nodes:[],nodes_available:false}},methods:{async load(){if(this.loading)return;this.loading=true;try{const res=await HttpUtil.get('/panel/api/dashboard-data');if(!res.success)throw new Error();this.data=res.obj;this.error='';}catch(e){this.error='Не удалось загрузить данные';}finally{this.loading=false;}}},mounted(){this.load();this.timer=setInterval(()=>{if(PagePollUtil.isVisible())this.load()},15000)},beforeDestroy(){clearInterval(this.timer)}});
+</script>
+{{ template "page/body_end" . }}

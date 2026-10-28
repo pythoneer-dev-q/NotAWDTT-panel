@@ -68,6 +68,7 @@ func Run() error {
 	// Panel pages
 	mux.HandleFunc(base+"panel/", app.serveDashboard)
 	mux.HandleFunc(base+"panel/nodes", app.serveNodesPage)
+	mux.HandleFunc(base+"panel/data", app.serveDataPage)
 	mux.HandleFunc(base+"panel/users", app.serveUsersPage)
 	mux.HandleFunc(base+"panel/rest-api", app.serveRestAPIPage)
 	mux.HandleFunc(base+"panel/connections", app.serveConnectionsPage)
@@ -186,6 +187,14 @@ func (a *App) serveUsersPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.renderHTML(w, r, "users.html", "Пользователи", nil)
+}
+
+func (a *App) serveDataPage(w http.ResponseWriter, r *http.Request) {
+	if a.parseSession(r) == nil {
+		http.Redirect(w, r, a.cfg.basePath(), http.StatusFound)
+		return
+	}
+	a.renderHTML(w, r, "data.html", "Данные", nil)
 }
 
 func (a *App) serveRestAPIPage(w http.ResponseWriter, r *http.Request) {

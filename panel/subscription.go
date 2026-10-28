@@ -9,6 +9,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +21,37 @@ import (
 )
 
 const subIDChars = "abcdefghijklmnopqrstuvwxyz0123456789"
+
+var subPageColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+func subscriptionPageAppearance() map[string]interface{} {
+	color := strings.TrimSpace(os.Getenv("WDTT_SUB_PAGE_ACCENT"))
+	if !subPageColorPattern.MatchString(color) {
+		color = "#f46b17"
+	}
+	radius, err := strconv.Atoi(strings.TrimSpace(os.Getenv("WDTT_SUB_PAGE_RADIUS")))
+	if err != nil || radius < 0 || radius > 32 {
+		radius = 16
+	}
+	theme := strings.ToLower(strings.TrimSpace(os.Getenv("WDTT_SUB_PAGE_THEME")))
+	if theme != "light" && theme != "dark" {
+		theme = "auto"
+	}
+	logo := strings.TrimSpace(os.Getenv("WDTT_SUB_PAGE_LOGO_URL"))
+	if u, err := url.Parse(logo); err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
+		logo = ""
+	}
+	optionalColor := func(key string) string {
+		value := strings.TrimSpace(os.Getenv(key))
+		if subPageColorPattern.MatchString(value) {
+			return value
+		}
+		return ""
+	}
+	return map[string]interface{}{"color": color, "radius": radius, "theme": theme, "logo": logo,
+		"background": optionalColor("WDTT_SUB_PAGE_BACKGROUND"), "surface": optionalColor("WDTT_SUB_PAGE_SURFACE"), "text": optionalColor("WDTT_SUB_PAGE_TEXT"),
+		"heading": strings.TrimSpace(os.Getenv("WDTT_SUB_PAGE_HEADING")), "instruction": strings.TrimSpace(os.Getenv("WDTT_SUB_PAGE_INSTRUCTION"))}
+}
 
 func genSubID() (string, error) {
 	b := make([]byte, 16)
@@ -457,6 +492,7 @@ func (a *App) serveSubInfoPage(w http.ResponseWriter, r *http.Request, subID str
 		"datepicker":   "gregorian",
 		"result":       links,
 		"linkTitles":   linkTitles,
+		"appearance":   subscriptionPageAppearance(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := htmlTemplates.ExecuteTemplate(w, "subscription.html", data); err != nil {

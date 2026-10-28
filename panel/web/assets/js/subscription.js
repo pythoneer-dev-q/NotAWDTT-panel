@@ -2,6 +2,12 @@
   // Vue app for Subscription page
   const el = document.getElementById('subscription-data');
   if (!el) return;
+  const preferredTheme = el.getAttribute('data-theme');
+  if (!localStorage.getItem('dark-mode') && (preferredTheme === 'light' || preferredTheme === 'dark')) {
+    themeSwitcher.isDarkTheme = preferredTheme === 'dark';
+    document.body.className = themeSwitcher.currentTheme;
+  }
+  const appearance = { color: el.getAttribute('data-color') || '#f46b17', radius: Number(el.getAttribute('data-radius') || 0), background: el.getAttribute('data-background') || '', surface: el.getAttribute('data-surface') || '', text: el.getAttribute('data-text') || '' };
   const textarea = document.getElementById('subscription-links');
   const titlesEl = document.getElementById('subscription-link-titles');
   const currentSubUrl = window.location.href;
@@ -139,6 +145,7 @@
     data: {
       themeSwitcher,
       app: data,
+      appearance,
       links: rawLinks,
       nodeGroups,
       lang: '',

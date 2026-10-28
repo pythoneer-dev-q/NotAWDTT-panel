@@ -1,9 +1,9 @@
 /* WDTT console: compact graphite surfaces and orange status accents. */
 :root { --wdtt-accent:#f46b17; --wdtt-accent-hover:#ff812f; --wdtt-accent-rgb:244,107,23; --wdtt-accent-soft:rgba(244,107,23,.12); --wdtt-radius:10px; }
-body.dark, body.dark #app.dark, body.dark #content-layout { background:#080808 !important; color:#f4f4f5; }
-body.dark #content-layout { background-image:radial-gradient(ellipse at 50% 0%,rgba(var(--wdtt-accent-rgb),.055),transparent 52%) !important; }
-body.dark #app.dark { --dark-color-background:#080808; --dark-color-surface-100:#111; --dark-color-surface-200:#171717; --dark-color-surface-300:#242424; --dark-color-stroke:#302222; --color-primary-100:var(--wdtt-accent); --dark-color-table-header-bg:#151515; --dark-color-table-body-bg:#111; }
-body.dark .ant-layout-sider, body.dark .ant-sidebar .ant-layout-sider, body.dark .ant-drawer-content { background:#0d0d0d !important; border-right:1px solid rgba(var(--wdtt-accent-rgb),.13); }
+body.dark, body.dark #app.dark, body.dark #content-layout { background:#191a18 !important; color:#f4f4f5; }
+body.dark #content-layout { background-image:none !important; }
+body.dark #app.dark { --dark-color-background:#191a18; --dark-color-surface-100:#1e1f1d; --dark-color-surface-200:#242624; --dark-color-surface-300:#30322f; --dark-color-stroke:#30322f; --color-primary-100:var(--wdtt-accent); --dark-color-table-header-bg:#20211f; --dark-color-table-body-bg:#1e1f1d; }
+body.dark .ant-layout-sider, body.dark .ant-sidebar .ant-layout-sider, body.dark .ant-drawer-content { background:#181918 !important; border-right:1px solid #30322f; }
 .wdtt-side-brand { height:78px; display:flex; align-items:center; gap:11px; padding:14px 17px; color:#f4f4ef; }
 .wdtt-side-brand > span:last-child { display:flex; flex-direction:column; line-height:1.2; }
 .wdtt-side-brand strong { font-size:18px; letter-spacing:.04em; }
@@ -13,9 +13,9 @@ body.dark .ant-layout-sider, body.dark .ant-sidebar .ant-layout-sider, body.dark
 body.dark .ant-sidebar .ant-menu, body.dark .ant-drawer .ant-menu { background:transparent !important; border:0; padding:0 8px; }
 body.dark .ant-sidebar .ant-menu-item, body.dark .ant-drawer .ant-menu-item { height:38px; line-height:38px; margin:3px 0 !important; border-radius:10px; color:#c3c8c0; }
 body.dark .ant-sidebar .ant-menu-item:hover, body.dark .ant-drawer .ant-menu-item:hover { color:#fff; background:#191919; }
-body.dark .ant-sidebar .ant-menu-item-selected, body.dark .ant-drawer .ant-menu-item-selected { color:#fff !important; background:var(--wdtt-accent-soft) !important; box-shadow:inset 3px 0 var(--wdtt-accent); }
+body.dark .ant-sidebar .ant-menu-item-selected, body.dark .ant-drawer .ant-menu-item-selected { color:#fff !important; background:#252725 !important; box-shadow:inset 3px 0 var(--wdtt-accent); font-weight:600; }
 body.dark .ant-sidebar .ant-menu-item-selected .anticon, body.dark .ant-drawer .ant-menu-item-selected .anticon { color:var(--wdtt-accent); }
-body.dark #app:not(.login-app):not(.subscription-page) .ant-card, body.dark #app:not(.login-app):not(.subscription-page) .node-stat-card { background:#111 !important; border:1px solid rgba(var(--wdtt-accent-rgb),.15) !important; border-radius:var(--wdtt-radius); box-shadow:0 4px 20px rgba(0,0,0,.25) !important; color:#f4f4f5; }
+body.dark #app:not(.login-app):not(.subscription-page) .ant-card, body.dark #app:not(.login-app):not(.subscription-page) .node-stat-card { background:#1e1f1d !important; border:1px solid #2e302d !important; border-radius:var(--wdtt-radius); box-shadow:none !important; color:#f4f4f5; }
 body.dark #app:not(.login-app):not(.subscription-page) .ant-card:hover { border-color:rgba(var(--wdtt-accent-rgb),.4) !important; }
 body.dark #app:not(.login-app):not(.subscription-page) .ant-card-head { background:transparent; min-height:43px; border-bottom:1px solid rgba(var(--wdtt-accent-rgb),.13); }
 body.dark #app:not(.login-app):not(.subscription-page) .ant-card-head-title { color:#e9ebe7; font-weight:650; padding:10px 0; }
@@ -52,6 +52,7 @@ body.dark .ant-input:focus, body.dark .ant-select-focused .ant-select-selection 
 #app:not(.login-app):not(.subscription-page) .ant-card-actions > li { min-width:0; }
 #app:not(.login-app):not(.subscription-page) .ant-table-wrapper { max-width:100%; }
 #app:not(.login-app):not(.subscription-page) .ant-table-content { overflow-x:auto; }
+.index-page .data-shortcut { margin:16px 0 4px; }
 @media (max-width:768px) {
   #app:not(.login-app):not(.subscription-page) #content-layout > .ant-layout-content { padding:14px; }
   #app:not(.login-app):not(.subscription-page) .ant-card-head { padding-left:14px; padding-right:14px; }

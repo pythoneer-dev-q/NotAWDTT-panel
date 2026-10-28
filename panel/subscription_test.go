@@ -35,3 +35,21 @@ func TestSubscriptionWantsHTML(t *testing.T) {
 		})
 	}
 }
+
+func TestSubscriptionPageAppearanceValidatesConfiguration(t *testing.T) {
+	t.Setenv("WDTT_SUB_PAGE_ACCENT", "#a1b2c3")
+	t.Setenv("WDTT_SUB_PAGE_RADIUS", "8")
+	t.Setenv("WDTT_SUB_PAGE_THEME", "light")
+	t.Setenv("WDTT_SUB_PAGE_LOGO_URL", "https://example.org/logo.png")
+	got := subscriptionPageAppearance()
+	if got["color"] != "#a1b2c3" || got["radius"] != 8 || got["theme"] != "light" || got["logo"] != "https://example.org/logo.png" {
+		t.Fatalf("invalid appearance: %#v", got)
+	}
+	t.Setenv("WDTT_SUB_PAGE_ACCENT", "red; display:none")
+	t.Setenv("WDTT_SUB_PAGE_RADIUS", "999")
+	t.Setenv("WDTT_SUB_PAGE_LOGO_URL", "javascript:alert(1)")
+	got = subscriptionPageAppearance()
+	if got["color"] != "#f46b17" || got["radius"] != 16 || got["logo"] != "" {
+		t.Fatalf("unsafe appearance: %#v", got)
+	}
+}

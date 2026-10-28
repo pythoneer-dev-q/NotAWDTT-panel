@@ -301,6 +301,19 @@ function uninstall_wdtt() {
     echo -e "${GREEN}WDTT удалён. Данные остались в /etc/wdtt и MongoDB.${NC}"
 }
 
+function update_wdtt() {
+    local source_dir="${WDTT_INSTALL_SOURCE_DIR:-}"
+    if [ -z "$source_dir" ] && [ -f /etc/wdtt/source-dir ]; then
+        IFS= read -r source_dir < /etc/wdtt/source-dir
+    fi
+    source_dir="${source_dir:-/usr/local/src/wdtt-panel-install}"
+    if [ ! -f "$source_dir/update.sh" ] || [ ! -d "$source_dir/.git" ]; then
+        echo "Исходный Git-репозиторий не найден: $source_dir. Обновление не выполнено." >&2
+        return 1
+    fi
+    bash "$source_dir/update.sh" "$@"
+}
+
 function interactive_menu() {
     check_root
     while true; do
@@ -318,6 +331,7 @@ function interactive_menu() {
         echo "  10) Редактировать конфигурацию .env (MongoDB, порты)"
         echo "  11) Переустановить WDTT"
         echo "  12) Удалить WDTT (с сохранением данных)"
+        echo "  13) Обновить WDTT из репозитория"
         echo "  0) Выход"
         echo "─────────────────────────────────────────────────"
         read -rp "Введите номер [0-12]: " choice
@@ -334,6 +348,7 @@ function interactive_menu() {
             10) edit_env ;;
             11) reinstall_wdtt; read -rp "Нажмите Enter для продолжения..." ;;
             12) uninstall_wdtt; return ;;
+            13) update_wdtt; read -rp "Нажмите Enter для продолжения..." ;;
             9)
                 echo -e "\n${BOLD}Вход в веб-панель:${NC}"
                 echo -e "URL:    ${CYAN}http://$(get_public_ip):${PANEL_PORT}/wdtt/${NC}"
@@ -382,6 +397,10 @@ case "${1:-}" in
     reinstall)
         reinstall_wdtt
         ;;
+    update)
+        shift
+        update_wdtt "$@"
+        ;;
     uninstall|remove)
         uninstall_wdtt
         ;;
@@ -401,6 +420,7 @@ case "${1:-}" in
         echo "  wdtt restore    - Восстановить из бэкапа"
         echo "  wdtt logs       - Просмотр логов в реальном времени"
         echo "  wdtt password   - Сбросить пароль администратора"
+        echo "  wdtt update     - Обновить панель и VPN из репозитория"
         echo "  wdtt reinstall  - Переустановить WDTT с сохранением данных"
         echo "  wdtt uninstall  - Удалить службу и бинарники с сохранением данных"
         ;;

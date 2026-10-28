@@ -462,7 +462,7 @@
         const withSpinner = options.withSpinner === true;
         this.refreshing = true;
         if (withSpinner) this.loadingStates.spinning = true;
-        await Promise.all([this.loadWdtt(), this.loadXrayInbounds()]);
+        await this.loadWdtt();
         if (!this.loadingStates.fetched) this.loadingStates.fetched = true;
         setTimeout(() => {
           this.refreshing = false;

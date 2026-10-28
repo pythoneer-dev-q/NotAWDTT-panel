@@ -394,7 +394,7 @@
         if (!startMsg.success) {
           this.certState.busy = false;
           this.certState.logRunning = false;
-          this.certState.logText += '\n✗ ' + (startMsg.msg || 'Ошибка запуска') + '\n';
+          this.certState.logText += '\nОшибка: ' + (startMsg.msg || 'не удалось запустить') + '\n';
           return;
         }
         const result = await this.waitAcmeJob();

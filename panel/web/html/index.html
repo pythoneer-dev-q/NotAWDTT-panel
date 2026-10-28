@@ -30,7 +30,7 @@
   .index-page .console-heading h1 { margin:0; font-size:26px; font-weight:750; line-height:1.2; }
   .index-page .console-heading p { margin:5px 0 0; opacity:.55; }
   .index-page .resource-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
-  .index-page .resource-card { min-height:136px; border:1px solid rgba(var(--wdtt-accent-rgb),.15); border-radius:10px; background:#111; padding:18px 20px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .index-page .resource-card { min-height:136px; border:1px solid #2e302d; border-radius:10px; background:#1e1f1d; padding:18px 20px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
   .index-page .resource-card .resource-icon { width:36px; height:36px; border-radius:11px; display:grid; place-items:center; color:var(--wdtt-accent); background:var(--wdtt-accent-soft); font-size:17px; }
   .index-page .resource-card .resource-label { color:#a2aaa0; font-size:13px; margin:11px 0 3px; }
   .index-page .resource-card strong { display:block; font-size:25px; letter-spacing:-.03em; }
@@ -169,32 +169,12 @@
         <a-row class="dashboard-grid" :gutter="isMobile ? 8 : 16">
               <a-col :span="24">
                 <div class="resource-grid">
-                  <div class="resource-card"><div><span class="resource-icon"><a-icon type="dashboard" /></span><div class="resource-label">CPU</div><strong>[[ status.cpu.percent ]]%</strong><small>[[ status.logicalPro ]] ядер</small></div><a-progress type="circle" :width="62" :percent="status.cpu.percent" :stroke-color="accentColor" /></div>
+                  <div class="resource-card"><div><span class="resource-icon"><a-icon type="dashboard" /></span><div class="resource-label">Использование CPU</div><strong>[[ status.cpu.percent ]]%</strong><small>[[ status.logicalPro ]] ядер</small></div></div>
                   <div class="resource-card"><div><span class="resource-icon"><a-icon type="database" /></span><div class="resource-label">RAM</div><strong>[[ SizeFormatter.sizeFormat(status.mem.current) ]]</strong><small>из [[ SizeFormatter.sizeFormat(status.mem.total) ]]</small></div><a-progress type="circle" :width="62" :percent="status.mem.percent" :stroke-color="accentColor" /></div>
                   <div class="resource-card"><div><span class="resource-icon"><a-icon type="hdd" /></span><div class="resource-label">Диск</div><strong>[[ SizeFormatter.sizeFormat(status.disk.current) ]]</strong><small>из [[ SizeFormatter.sizeFormat(status.disk.total) ]]</small></div><a-progress type="circle" :width="62" :percent="status.disk.percent" :stroke-color="accentColor" /></div>
                   <div class="resource-card"><div><span class="resource-icon"><a-icon type="cloud-upload" /></span><div class="resource-label">Общий трафик</div><strong>[[ SizeFormatter.sizeFormat(status.netTraffic.sent + status.netTraffic.recv) ]]</strong><small>↑ [[ SizeFormatter.sizeFormat(status.netTraffic.sent) ]] · ↓ [[ SizeFormatter.sizeFormat(status.netTraffic.recv) ]]</small></div></div>
                 </div>
-                <div class="resource-chart"><div class="resource-chart-head"><h2>Нагрузка CPU</h2><a-button size="small" type="link" @click="openCpuHistory">История</a-button></div><sparkline :data="cpuHistory" :vb-width="840" :height="90" :stroke="accentColor" :stroke-width="2.2" :fill-opacity="0.14" :show-grid="false" :show-axes="false" :show-tooltip="false"></sparkline></div>
-                <section id="data" class="data-section">
-                  <div class="data-header"><div><h2>Данные</h2><p>Пользователи, устройства и состояние кластера</p></div><a-button size="small" icon="reload" @click="getDashboardData">Обновить</a-button></div>
-                  <a-alert v-if="dashboardDataError" type="warning" :message="dashboardDataError" show-icon style="margin-bottom:12px"></a-alert>
-                  <div class="data-stats">
-                    <div class="data-stat"><span>Пользователи</span><strong>[[ dashboardData.users ]]</strong></div>
-                    <div class="data-stat"><span>Сейчас онлайн</span><strong>[[ dashboardData.online ]]</strong></div>
-                    <div class="data-stat"><span>Привязано устройств</span><strong>[[ dashboardData.devices ]]</strong></div>
-                    <div class="data-stat"><span>Ноды онлайн</span><strong>[[ dashboardData.nodes_available ? dashboardData.nodes.filter(n => n.online).length + ' / ' + dashboardData.nodes.length : '—' ]]</strong></div>
-                  </div>
-                  <div v-if="dashboardData.nodes.length" class="data-nodes">
-                    <div v-for="node in dashboardData.nodes" :key="node.id" class="data-node">
-                      <div class="data-node-head"><strong>[[ node.name || node.host || node.id ]]</strong><a-tag :color="node.online ? 'green' : 'default'">[[ node.online ? 'Онлайн' : (node.enabled ? 'Офлайн' : 'Выключена') ]]</a-tag></div>
-                      <p>[[ node.host ]]</p><p>Онлайн пользователей: <b>[[ node.online ? node.users : '—' ]]</b></p>
-                      <p>Трафик: ↓ [[ SizeFormatter.sizeFormat(node.down) ]] · ↑ [[ SizeFormatter.sizeFormat(node.up) ]]</p>
-                      <p>Скорость: [[ node.speed_available ? '↓ ' + SizeFormatter.sizeFormat(node.speed_down) + '/с · ↑ ' + SizeFormatter.sizeFormat(node.speed_up) + '/с' : 'нет данных' ]]</p>
-                      <p>CPU и RAM ноды не передаются</p>
-                    </div>
-                  </div>
-                  <p v-else style="margin:14px 0 0;opacity:.65">[[ dashboardData.nodes_available ? 'Ноды ещё не добавлены' : 'Нет данных о нодах' ]]</p>
-                </section>
+                <a-button class="data-shortcut" icon="bar-chart" @click="openData">Данные и статистика <a-icon type="arrow-right" /></a-button>
               </a-col>
               <a-col :xs="24" :sm="24" :lg="12">
                 <a-card hoverable class="wdtt-card">
@@ -229,34 +209,6 @@
                 </a-card>
               </a-col>
 
-              <a-col :xs="24" :sm="24" :lg="12">
-                <a-card title="Ноды и хранилище">
-                  <div style="display:flex; justify-content:space-around; align-items:center; padding:16px 0;">
-                    <div style="text-align:center;">
-                      <div style="font-size:12px; color:#888;">VPS-ноды</div>
-                      <div style="font-size:20px; font-weight:700; color:var(--wdtt-accent);">Управление нодами</div>
-                    </div>
-                    <div style="text-align:center;">
-                      <div style="font-size:12px; color:#888;">База данных</div>
-                      <div style="font-size:20px; font-weight:700;">MongoDB / SQLite</div>
-                    </div>
-                    <div style="text-align:center;">
-                      <div style="font-size:12px; color:#888;">Лимиты</div>
-                      <div style="font-size:20px; font-weight:700;">В настройках</div>
-                    </div>
-                  </div>
-                  <template #actions>
-                    <a-space direction="horizontal" @click="location.href = basePath + 'panel/nodes'" class="jc-center">
-                      <a-icon type="cloud-server"></a-icon>
-                      <span v-if="!isMobile">Управление нодами (VPS)</span>
-                    </a-space>
-                    <a-space direction="horizontal" @click="openLogs()" class="jc-center">
-                      <a-icon type="file-text"></a-icon>
-                      <span v-if="!isMobile">Логи панели</span>
-                    </a-space>
-                  </template>
-                </a-card>
-              </a-col>
 
               <a-col :xs="24" :sm="24" :lg="12">
                 <a-card title="Скорость VPN" hoverable>
@@ -1480,6 +1432,9 @@
       },
       openUsers() {
         location.href = basePath + 'panel/users';
+      },
+      openData() {
+        location.href = basePath + 'panel/data';
       },
       openXraySettings() {
         location.href = basePath + 'panel/xray';

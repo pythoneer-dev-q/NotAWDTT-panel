@@ -236,6 +236,12 @@ func userRowMatchesQuery(row map[string]interface{}, query string) bool {
 }
 
 func (a *App) handleUsersList(w http.ResponseWriter, r *http.Request) {
+	if _, paged := r.URL.Query()["limit"]; paged {
+		if m, err := paneldb.GetDefaultMongo(); err == nil && m != nil {
+			a.handleMongoUsersPage(w, r, m)
+			return
+		}
+	}
 	// Подтянуть live vk_calls / снять finishing; ручные хеши не затираем (#23).
 	reconcileUserSessionFields()
 	db, err := loadPasswords()

@@ -102,6 +102,7 @@
     </a-setting-list-item>
     <a-alert type="info" show-icon :style="{ marginTop: '12px' }"
       message="После изменения порта или TLS перезапустите панель. URL подписки: https://домен:порт/sub/{subId}"></a-alert>
+    <a-alert type="info" show-icon :style="{ marginTop: '12px' }" message="Оформление страницы подписки" description="Цвет, тема, скругление, логотип, заголовок и инструкция задаются переменными WDTT_SUB_PAGE_* в /etc/wdtt/.env. Откройте sudo wdtt env и перезапустите панель."></a-alert>
   </a-collapse-panel>
 </a-collapse>
 {{end}}

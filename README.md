@@ -1,8 +1,16 @@
 # WDTT
 
+[![Build and tests](https://github.com/pythoneer-dev-q/NotAWDTT-panel/actions/workflows/build-server.yml/badge.svg)](https://github.com/pythoneer-dev-q/NotAWDTT-panel/actions/workflows/build-server.yml)
+[![Latest release](https://img.shields.io/github/v/release/pythoneer-dev-q/NotAWDTT-panel)](https://github.com/pythoneer-dev-q/NotAWDTT-panel/releases/latest)
+
 [![Поддержать WDTT](https://devgamemaga.mooo.com:9443/b/soft.svg)](https://devgamemaga.mooo.com:9443/donate)
 
 VPN на VPS через медиарелеи ВК (TURN / RAW UDP) с современной веб-панелью в стиле **Remnawave**, поддержкой **MongoDB**, многонодовых кластеров и полноценным **RESTful API**.
+
+<!-- Скриншоты: сохраните изображения без персональных данных в docs/screenshots/
+и добавьте сюда: ![Панель управления](docs/screenshots/dashboard.png) -->
+
+Собранные бинарники для Linux amd64 и arm64 доступны в артефактах [GitHub Actions](https://github.com/pythoneer-dev-q/NotAWDTT-panel/actions/workflows/build-server.yml); для тегов версий они также публикуются в [релизах](https://github.com/pythoneer-dev-q/NotAWDTT-panel/releases).
 
 ```
 wdtt/
@@ -59,6 +67,8 @@ WDTT расширяет upstream: мультипользователи, Remnawav
 sudo bash setup.sh
 ```
 Название проекта на странице подписки и в боковом меню задаётся переменной `WDTT_PROJECT_NAME` в `/etc/wdtt/.env`; после изменения перезапустите панель.
+
+Оформление страницы подписки настраивается там же: `WDTT_SUB_PAGE_ACCENT`, `WDTT_SUB_PAGE_BACKGROUND`, `WDTT_SUB_PAGE_SURFACE`, `WDTT_SUB_PAGE_TEXT` (цвета `#RRGGBB`), `WDTT_SUB_PAGE_THEME` (`auto`, `light`, `dark`), `WDTT_SUB_PAGE_RADIUS` (0–32), `WDTT_SUB_PAGE_LOGO_URL` (HTTPS), `WDTT_SUB_PAGE_HEADING` и `WDTT_SUB_PAGE_INSTRUCTION` (обычный текст). Для редактирования используйте `sudo wdtt env`. Выбор темы пользователем в браузере имеет приоритет.
 При интерактивной установке выберите «Только панель» или «Панель + нода». Для автоматизации: `sudo bash setup.sh --panel-only` либо `sudo bash setup.sh --panel-node`.
 Скрипт автоматически:
 1. Установит MongoDB (при необходимости) и зависимости.
@@ -123,6 +133,7 @@ wdtt backup           # Создание резервной копии базы 
 wdtt restore <файл>   # Восстановление из архива
 sudo bash update.sh --log-level warn   # Обновление с уменьшенным уровнем логов (debug/info/warn/error)
 sudo bash update.sh --check            # Сверить исходники и установленный бинарник с GitHub main
+sudo wdtt update                       # Обновить из установленного репозитория
 ```
 
 В карточке пользователя доступны лимит трафика в ГБ, срок доступа, число устройств и шейпинг загрузки и отдачи в Мбит/с. `0` для трафика или скорости снимает соответствующее ограничение. Скорость меняется для активных подключений; настройки передаются внешним нодам при синхронизации каждые 10 секунд. При нескольких нодах квота трафика может быть превышена на объём, переданный между синхронизациями. Для применения новой версии на ноде после обновления панели запустите на VPS `sudo wdtt-node reinstall`; её версию и необходимость обновления видно на странице «Ноды».

@@ -61,7 +61,7 @@
             return {
                 tabs: [
                     { key: '{{ .base_path }}panel/', icon: 'dashboard', title: '{{ i18n "menu.dashboard"}}' },
-                    { key: '{{ .base_path }}panel/#data', icon: 'bar-chart', title: 'Данные' },
+                    { key: '{{ .base_path }}panel/data', icon: 'bar-chart', title: 'Данные' },
                     { key: '{{ .base_path }}panel/nodes', icon: 'cloud-server', title: 'Ноды (VPS)' },
                     { key: '{{ .base_path }}panel/users', icon: 'team', title: '{{ i18n "menu.users"}}' },
 					{ key: '{{ .base_path }}panel/rest-api', icon: 'code', title: 'REST API' },
@@ -69,7 +69,7 @@
                     { key: '{{ .base_path }}panel/settings', icon: 'setting', title: '{{ i18n "menu.settings"}}' },
                     { key: '{{ .base_path }}logout/', icon: 'logout', title: '{{ i18n "menu.logout"}}' },
                 ],
-                activeTab: ['{{ .request_uri }}'],
+                activeTab: [window.location.pathname],
                 visible: false,
                 collapsed: JSON.parse(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) || 'false'),
             }

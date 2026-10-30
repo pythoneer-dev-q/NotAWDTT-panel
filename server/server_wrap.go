@@ -11,6 +11,8 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -239,8 +241,8 @@ func NewObfsState() *ObfsState {
 	}
 }
 
-func obfsBuildNonce(ssrc uint32, seq uint16, ts uint32) []byte {
-	n := make([]byte, 12)
+func obfsBuildNonce(ssrc uint32, seq uint16, ts uint32) [12]byte {
+	var n [12]byte
 	binary.BigEndian.PutUint32(n[0:4], ssrc)
 	binary.BigEndian.PutUint16(n[4:6], seq)
 	binary.BigEndian.PutUint32(n[8:12], ts)
@@ -283,7 +285,7 @@ func obfsWrapPacket(key, payload []byte, cfg *ObfsConfig, state *ObfsState) ([]b
 	if err != nil {
 		return nil, fmt.Errorf("obfs: cipher init: %w", err)
 	}
-	sealed := aead.Seal(out[12:12], nonce, payload, out[:12])
+	sealed := aead.Seal(out[12:12], nonce[:], payload, out[:12])
 	padStart := 12 + len(sealed)
 	if padRand > 0 {
 		rand.Read(out[padStart : padStart+padRand])
@@ -326,7 +328,7 @@ func obfsUnwrapPacket(key, wire, dst []byte) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("obfs: cipher init: %w", err)
 	}
-	plain, err := aead.Open(dst[:0], nonce, wire[12:payloadEnd], wire[:12])
+	plain, err := aead.Open(dst[:0], nonce[:], wire[12:payloadEnd], wire[:12])
 	if err != nil {
 		return 0, fmt.Errorf("obfs: auth: %w", err)
 	}
@@ -349,14 +351,28 @@ func listenWrapped(addr *net.UDPAddr, keys *wrapKeyStore) (dtlsnet.PacketListene
 	if keys == nil {
 		return nil, errors.New("wrap: key store unavailable")
 	}
-	inner, err := (&pionudp.ListenConfig{
+	udpConfig := &pionudp.ListenConfig{
 		ReadBufferSize:  8 << 20,
 		WriteBufferSize: 2 << 20,
-	}).Listen("udp", addr)
+	}
+	batchEnabled := runtime.GOOS == "linux" && os.Getenv("WDTT_UDP_BATCH") != "0"
+	if batchEnabled {
+		udpConfig.Batch = pionudp.BatchIOConfig{
+			Enable:             true,
+			ReadBatchSize:      32,
+			WriteBatchSize:     16,
+			WriteBatchInterval: time.Millisecond,
+		}
+	}
+	inner, err := udpConfig.Listen("udp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("wrap: udp listen: %w", err)
 	}
-	log.Printf("[WRAP] UDP buffers: read=8MB write=2MB on %s", addr.String())
+	if batchEnabled {
+		log.Printf("[WRAP] UDP buffers: read=8MB write=2MB; batch read=32 write=16/1ms on %s", addr.String())
+	} else {
+		log.Printf("[WRAP] UDP buffers: read=8MB write=2MB; batch disabled on %s", addr.String())
+	}
 	return &wrapPacketListener{
 		inner: dtlsnet.PacketListenerFromListener(inner),
 		keys:  keys,
@@ -390,9 +406,23 @@ type wrapPacketConn struct {
 	obfsWrite    *ObfsState
 }
 
+const wrapReadBufferCapacity = 2304
+
+var wrapReadBufferPool = sync.Pool{New: func() any {
+	return make([]byte, wrapReadBufferCapacity)
+}}
+
 func (c *wrapPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	// Extra space for RTP header (12) + AEAD tag (16) + padding.
-	buf := make([]byte, len(p)+100)
+	buf := wrapReadBufferPool.Get().([]byte)
+	if len(p)+100 > cap(buf) {
+		buf = make([]byte, len(p)+100)
+	} else {
+		buf = buf[:len(p)+100]
+	}
+	if cap(buf) == wrapReadBufferCapacity {
+		defer wrapReadBufferPool.Put(buf[:wrapReadBufferCapacity])
+	}
 	n, addr, err := c.inner.ReadFrom(buf)
 	if err != nil {
 		return 0, addr, err

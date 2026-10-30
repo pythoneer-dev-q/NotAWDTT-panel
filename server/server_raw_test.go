@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"net"
@@ -338,6 +339,23 @@ func TestRawSessionGroupEnqueueSticky(t *testing.T) {
 	if n1 > 0 && n2 > 0 {
 		t.Fatal("chunk-RR regression: one flow must not split across sessions")
 	}
+}
+
+func TestRawDownlinkKeepsQueuedPacketAfterTunBufferReuse(t *testing.T) {
+	g := &rawSessionGroup{ip: "10.70.0.2"}
+	s := &rawSession{ip: "10.70.0.2", deviceID: "d", downCh: make(chan []byte, 2)}
+	g.add(s)
+	pkt := tcpRawPkt(2, 4242, 443)
+	want := append([]byte(nil), pkt...)
+	if ok, _ := g.enqueueDown(pkt); !ok {
+		t.Fatal("enqueue failed")
+	}
+	clear(pkt)
+	got := <-s.downCh
+	if !bytes.Equal(got, want) {
+		t.Fatal("queued downlink changed when the TUN read buffer was reused")
+	}
+	rawReleaseDownPacket(got)
 }
 
 func TestRawSessionGroupSkipsAndCancelsStaleSession(t *testing.T) {

@@ -16,7 +16,16 @@ const (
 )
 
 func rawFrameEncode(seq uint32, ip []byte) []byte {
-	out := make([]byte, rawFrameHeader+len(ip))
+	return rawFrameAppend(nil, seq, ip)
+}
+
+func rawFrameAppend(out []byte, seq uint32, ip []byte) []byte {
+	size := rawFrameHeader + len(ip)
+	if cap(out) < size {
+		out = make([]byte, size)
+	} else {
+		out = out[:size]
+	}
 	out[0] = rawFrameMagic0
 	out[1] = rawFrameMagic1
 	binary.BigEndian.PutUint32(out[2:6], seq)

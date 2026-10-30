@@ -31,22 +31,23 @@ const (
 
 // rawSession — одна DTLS-сессия в режиме RAW (IP over WRAP, без WireGuard).
 type rawSession struct {
-	deviceID   string
-	registryID string
-	ip         string
-	password   string
-	isMain     bool
-	conn       net.Conn
-	cancel     context.CancelFunc
-	downCh     chan []byte  // async downlink — TUN read не ждёт DTLS Write
-	writeMu    sync.Mutex   // все Write в clientConn (downWriter + keepalive)
-	lastSeen   atomic.Int64 // последний uplink/keepalive; stale TURN исключается из downlink
-	framed     atomic.Bool  // эта DTLS-сессия понимает RA frames
-	chunked    bool         // клиент договорился о CHUNK1
-	qwdtt      bool         // qWDTT Android 1.4: padded 0xFF keepalive, без source-IP check
-	up         int64
-	down       int64
-	firstUp    uint32 // log once
+	deviceID          string
+	registryID        string
+	ip                string
+	password          string
+	isMain            bool
+	conn              net.Conn
+	cancel            context.CancelFunc
+	downCh            chan []byte  // async downlink — TUN read не ждёт DTLS Write
+	writeMu           sync.Mutex   // все Write в clientConn (downWriter + keepalive)
+	lastSeen          atomic.Int64 // последний uplink/keepalive; stale TURN исключается из downlink
+	lastActivityTouch atomic.Int64
+	framed            atomic.Bool // эта DTLS-сессия понимает RA frames
+	chunked           bool        // клиент договорился о CHUNK1
+	qwdtt             bool        // qWDTT Android 1.4: padded 0xFF keepalive, без source-IP check
+	up                int64
+	down              int64
+	firstUp           uint32 // log once
 }
 
 // rawSessionGroup — все DTLS-воркеры одного device делят один 10.70.x.y.
@@ -66,13 +67,17 @@ type rawSessionGroup struct {
 	chunkIndex     int
 	chunkCount     int
 	chunkStartedAt time.Time
+	liveScratch    []*rawSession
+	chunkScratch   []*rawSession
+	frameScratch   []*rawSession
 }
 
 const (
-	rawDirectPortOffset = 3
-	rawDownChBuf        = 8192
-	rawFlowAffTTL       = 3 * time.Minute
-	rawFlowAffMax       = 8192
+	rawDirectPortOffset   = 3
+	rawDownChBuf          = 8192
+	rawDownPacketCapacity = 1536
+	rawFlowAffTTL         = 3 * time.Minute
+	rawFlowAffMax         = 8192
 	// Multipath flowlet: per-packet RR создаёт максимальный TCP reorder.
 	rawMPChunkPackets         = 16
 	rawFramedModeTTL          = 10 * time.Second
@@ -83,6 +88,38 @@ const (
 	// 25s сохраняет совместимость и вместо 30 минут быстро убирает stale path.
 	rawSessionFreshTTL = 25 * time.Second
 )
+
+var rawDownPacketPool = sync.Pool{New: func() any {
+	return make([]byte, 0, rawDownPacketCapacity)
+}}
+
+func rawDownPacket(size int) []byte {
+	if size > rawDownPacketCapacity {
+		return make([]byte, size)
+	}
+	return rawDownPacketPool.Get().([]byte)[:size]
+}
+
+func rawCopyDownPacket(pkt []byte) []byte {
+	out := rawDownPacket(len(pkt))
+	copy(out, pkt)
+	return out
+}
+
+func rawReleaseDownPacket(pkt []byte) {
+	if cap(pkt) == rawDownPacketCapacity {
+		rawDownPacketPool.Put(pkt[:0])
+	}
+}
+
+func (s *rawSession) touchActivity() {
+	now := time.Now().UnixNano()
+	last := s.lastActivityTouch.Load()
+	if now-last < int64(time.Second) || !s.lastActivityTouch.CompareAndSwap(last, now) {
+		return
+	}
+	userTouchActivity(s.registryID)
+}
 
 var (
 	rawTunOnce    sync.Once
@@ -510,7 +547,7 @@ func (g *rawSessionGroup) tryAdd(sess *rawSession, limit int) bool {
 }
 
 func (g *rawSessionGroup) liveSessionsLocked(now time.Time) []*rawSession {
-	live := make([]*rawSession, 0, len(g.sessions))
+	live := g.liveScratch[:0]
 	cutoff := now.Add(-rawSessionFreshTTL).UnixNano()
 	for _, sess := range g.sessions {
 		if sess == nil || sess.downCh == nil {
@@ -524,6 +561,7 @@ func (g *rawSessionGroup) liveSessionsLocked(now time.Time) []*rawSession {
 		}
 		live = append(live, sess)
 	}
+	g.liveScratch = live
 	return live
 }
 
@@ -563,6 +601,12 @@ func (g *rawSessionGroup) remove(sess *rawSession) (empty bool) {
 			break
 		}
 	}
+	clear(g.liveScratch)
+	clear(g.chunkScratch)
+	clear(g.frameScratch)
+	g.liveScratch = g.liveScratch[:0]
+	g.chunkScratch = g.chunkScratch[:0]
+	g.frameScratch = g.frameScratch[:0]
 	for k, s := range g.flowAff {
 		if s == sess {
 			delete(g.flowAff, k)
@@ -714,19 +758,20 @@ func (g *rawSessionGroup) enqueueDown(pkt []byte) (ok bool, nbytes int) {
 		!affinity.framed.Load() && !affinity.chunked {
 		if exp := g.flowExp[key]; exp >= now.UnixNano() &&
 			affinity.lastSeen.Load() >= now.Add(-rawSessionFreshTTL).UnixNano() {
-			out = append([]byte(nil), pkt...)
+			out = rawCopyDownPacket(pkt)
 			sess = affinity
 			g.flowExp[key] = now.Add(rawFlowAffTTL).UnixNano()
 		}
 	}
 	if sess == nil {
 		liveSessions := g.liveSessionsLocked(now)
-		chunkedSessions := make([]*rawSession, 0, len(liveSessions))
+		chunkedSessions := g.chunkScratch[:0]
 		for _, candidate := range liveSessions {
 			if candidate.chunked {
 				chunkedSessions = append(chunkedSessions, candidate)
 			}
 		}
+		g.chunkScratch = chunkedSessions
 		if n := len(chunkedSessions); n > 0 {
 			if g.chunkStartedAt.IsZero() {
 				g.chunkStartedAt = now
@@ -738,7 +783,7 @@ func (g *rawSessionGroup) enqueueDown(pkt []byte) (ok bool, nbytes int) {
 			if g.chunkIndex >= n {
 				g.chunkIndex = 0
 			}
-			out = append([]byte(nil), pkt...)
+			out = rawCopyDownPacket(pkt)
 			start := g.chunkIndex
 			for i := 0; i < n; i++ {
 				idx := (start + i) % n
@@ -759,41 +804,45 @@ func (g *rawSessionGroup) enqueueDown(pkt []byte) (ok bool, nbytes int) {
 				default:
 				}
 			}
-			return false, len(out)
+			rawReleaseDownPacket(out)
+			return false, len(pkt)
 		}
 	}
 	framedRecent := g.framed.Load() &&
 		now.UnixNano()-g.framedLastSeen.Load() <= int64(rawFramedModeTTL)
 	if sess == nil && framedRecent {
 		liveSessions := g.liveSessionsLocked(now)
-		framedSessions := make([]*rawSession, 0, len(liveSessions))
+		framedSessions := g.frameScratch[:0]
 		for _, candidate := range liveSessions {
 			if candidate.framed.Load() {
 				framedSessions = append(framedSessions, candidate)
 			}
 		}
+		g.frameScratch = framedSessions
 		n := len(framedSessions)
 		if n > 0 {
 			seq := g.outSeq.Next()
-			out = rawFrameEncode(seq, pkt)
+			out = rawFrameAppend(rawDownPacket(rawFrameHeader+len(pkt)), seq, pkt)
 			chunk := g.rr / rawMPChunkPackets
 			g.rr++
 			sess = framedSessions[chunk%uint32(n)]
 		}
 	}
 	if sess == nil {
-		out = append([]byte(nil), pkt...)
+		out = rawCopyDownPacket(pkt)
 		sess = g.pickForLocked(pkt)
 	}
 	if sess == nil || sess.downCh == nil {
-		return false, len(out)
+		rawReleaseDownPacket(out)
+		return false, len(pkt)
 	}
 	select {
 	case sess.downCh <- out:
 		return true, len(out)
 	default:
 		// переполнен — дроп лучше, чем стоп всего TUN read
-		return false, len(out)
+		rawReleaseDownPacket(out)
+		return false, len(pkt)
 	}
 }
 
@@ -1172,7 +1221,7 @@ func runRawRelay(ctx context.Context, clientConn net.Conn, deviceID, ip, passwor
 			if relaySess != nil {
 				relaySess.touch()
 			}
-			userTouchActivity(sessionIdentity)
+			sess.touchActivity()
 			if !sess.qwdtt && n == 1 {
 				sess.writeMu.Lock()
 				_, _ = clientConn.Write([]byte{0xFF})
@@ -1183,7 +1232,7 @@ func runRawRelay(ctx context.Context, clientConn net.Conn, deviceID, ip, passwor
 		if sess.qwdtt && strings.HasPrefix(string(buf[:n]), "DISCONNECT_RAW:") {
 			return
 		}
-		userTouchActivity(sessionIdentity)
+		sess.touchActivity()
 		if relaySess != nil {
 			relaySess.touch()
 		}
@@ -1253,11 +1302,13 @@ func rawSessionDownWriter(sess *rawSession, downCh <-chan []byte) {
 	}
 	for pkt := range downCh {
 		if sess.conn == nil {
+			rawReleaseDownPacket(pkt)
 			continue
 		}
 		sess.writeMu.Lock()
 		_, err := sess.conn.Write(pkt)
 		sess.writeMu.Unlock()
+		rawReleaseDownPacket(pkt)
 		if err != nil {
 			if sess.cancel != nil {
 				sess.cancel()
@@ -1266,7 +1317,7 @@ func rawSessionDownWriter(sess *rawSession, downCh <-chan []byte) {
 		}
 		atomic.AddInt64(&sess.down, int64(len(pkt)))
 		atomic.AddInt64(&totalBytesToClient, int64(len(pkt)))
-		userTouchActivity(sess.registryID)
+		sess.touchActivity()
 	}
 }
 

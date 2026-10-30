@@ -10,7 +10,11 @@
   .nodes-page .node-actions { display: flex; flex-wrap: wrap; gap: 5px; }
   .nodes-page .node-actions .ant-btn { margin: 0; }
   .nodes-page .node-list { display:grid; gap:10px; }
-  .nodes-page .node-row { border:1px solid #343a32; border-radius:13px; padding:14px 16px; display:grid; grid-template-columns:minmax(150px,1.3fr) minmax(150px,1fr) minmax(130px,.8fr) auto; gap:14px; align-items:center; }
+  .nodes-page .node-row { border:1px solid #343a32; border-radius:var(--wdtt-radius); padding:14px 16px; display:grid; grid-template-columns:minmax(150px,1.3fr) minmax(150px,1fr) minmax(130px,.8fr) auto; gap:14px; align-items:center; }
+  .nodes-page .node-row-graph { grid-column:1/-1; border-top:1px solid rgba(127,127,127,.18); padding-top:10px; }
+  .nodes-page .node-row-graph svg { width:100%; height:52px; display:block; }
+  .nodes-page .node-row-graph polyline { fill:none; stroke:var(--wdtt-accent); stroke-width:2; vector-effect:non-scaling-stroke; }
+  .nodes-page .node-row .node-row-graph small { display:flex; justify-content:space-between; gap:12px; }
   .nodes-page .node-row.is-online { border-left:3px solid var(--wdtt-accent); }
   .nodes-page .node-row small { display:block; opacity:.55; margin-top:4px; }
   .nodes-page .node-row-name { font-size:15px; font-weight:700; }
@@ -119,6 +123,7 @@
                   <div><div class="node-endpoint">[[ row.host || serverIP ]]</div><small>UDP [[ row.dtls_port || 56000 ]] · RAW [[ row.raw_port || 56003 ]]</small></div>
                   <div><a-tag :color="row.status === 'online' ? 'green' : (row.status === 'installing' ? 'orange' : 'default')">[[ row.status === 'online' ? 'Онлайн' : (row.status === 'installing' ? 'Подключается' : (row.status === 'disabled' ? 'Выключена' : 'Нет связи')) ]]</a-tag><div class="node-traffic">[[ row.online_users || 0 ]] сессий · [[ formatBytes((row.traffic_up || 0) + (row.traffic_down || 0)) ]]</div><small v-if="row.last_seen_at">Последний ответ: [[ new Date(row.last_seen_at * 1000).toLocaleString('ru-RU') ]]</small><small v-if="row.cert_sha256" :title="row.cert_sha256">DTLS SHA-256: [[ row.cert_sha256.slice(0, 20) ]]…</small></div>
                   <div class="node-actions"><a-button size="small" icon="wifi" @click="pingNode(row)" :loading="row.pinging">DNS</a-button><a-button v-if="!row.is_local" :disabled="!row.is_active" size="small" icon="download" @click="showInstallCmd(row)">Установить</a-button><a-button v-if="!row.is_local && row.last_seen_at" size="small" icon="sync" @click="copyNodeUpdate">Обновить</a-button><a-button size="small" icon="edit" @click="openEditModal(row)"></a-button><a-popconfirm v-if="!row.is_local" title="Удалить ноду?" ok-text="Да" cancel-text="Нет" @confirm="deleteNode(row.id)"><a-button size="small" icon="delete"></a-button></a-popconfirm></div>
+                  <div class="node-row-graph"><small><span>CPU [[ row.status === 'online' && row.memory_total ? Number(row.cpu_percent || 0).toFixed(1) + '%' : '—' ]] · RAM [[ row.memory_total ? formatBytes(row.memory_used || 0) + ' / ' + formatBytes(row.memory_total) : '—' ]]</span><span>Скорость [[ nodeRate(row.id) ]]</span></small><svg viewBox="0 0 240 52" preserveAspectRatio="none" role="img" :aria-label="'График трафика ' + row.name"><polyline :points="nodeSpark(row.id)"></polyline></svg></div>
                 </div>
               </div>
             </a-card>
@@ -229,6 +234,8 @@ new Vue({
         pin: '',
       },
       nodePoll: null,
+      nodeSamples: {},
+      nodePrevious: {},
     };
   },
   computed: {
@@ -252,13 +259,10 @@ new Vue({
   watch: {
     'cmdModal.panelUrl'() { this.updateInstallCmd(); },
     'cmdModal.pin'() { this.updateInstallCmd(); },
-    'cmdModal.visible'(visible) {
-      if (this.nodePoll) clearInterval(this.nodePoll);
-      this.nodePoll = visible ? setInterval(() => this.fetchNodes(true), 10000) : null;
-    },
   },
   mounted() {
     this.fetchNodes();
+    this.nodePoll = setInterval(() => { if (PagePollUtil.isVisible()) this.fetchNodes(true); }, 10000);
   },
   beforeDestroy() {
     if (this.nodePoll) clearInterval(this.nodePoll);
@@ -274,6 +278,7 @@ new Vue({
           this.panelVersion = res.obj.panel_version || '';
           this.panelCommit = res.obj.panel_commit || '';
           this.nodes = (res.obj.nodes || []).map(n => ({ ...n, pinging: false, latency: null }));
+          this.recordNodeSamples(this.nodes);
         } else if (!silent) {
           this.$message.error(res.msg || 'Не удалось загрузить ноды');
         }
@@ -281,6 +286,24 @@ new Vue({
         this.loading = false;
         if (!silent) this.$message.error('Ошибка загрузки нод: ' + err);
       });
+    },
+    recordNodeSamples(nodes) {
+      const now = Date.now();
+      nodes.forEach(node => {
+        const total = Number(node.traffic_up || 0) + Number(node.traffic_down || 0);
+        const prev = this.nodePrevious[node.id];
+        const rate = prev && now > prev.at && total >= prev.total ? Math.max(0, (total - prev.total) * 1000 / (now - prev.at)) : 0;
+        const values = (this.nodeSamples[node.id] || []).concat(rate).slice(-30);
+        this.$set(this.nodeSamples, node.id, values);
+        this.nodePrevious[node.id] = { total, at: now };
+      });
+    },
+    nodeRate(id) { const values = this.nodeSamples[id] || []; return values.length > 1 ? this.formatBytes(values[values.length - 1]) + '/с' : '—'; },
+    nodeSpark(id) {
+      const values = this.nodeSamples[id] || [];
+      if (values.length < 2) return '0,50 240,50';
+      const max = Math.max(1, ...values);
+      return values.map((v, i) => `${i * 240 / (values.length - 1)},${50 - v * 44 / max}`).join(' ');
     },
     openAddModal() {
       this.modal.isEdit = false;

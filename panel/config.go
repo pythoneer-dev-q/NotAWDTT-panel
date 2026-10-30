@@ -363,7 +363,9 @@ func savePanelConfig(cfg *PanelConfig) error {
 
 func randomHex(n int) string {
 	b := make([]byte, n)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("secure randomness unavailable: " + err.Error())
+	}
 	return hex.EncodeToString(b)
 }
 

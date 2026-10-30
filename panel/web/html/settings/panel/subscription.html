@@ -2,6 +2,7 @@
 <a-collapse default-active-key="1">
   <a-collapse-panel key="appearance" header="Конструктор страницы подписки">
     <p>Изменения применяются после сохранения. Цвета фона, карточек и текста можно оставить пустыми, чтобы использовать выбранную тему.</p>
+    <div class="sub-preset-list"><button v-for="preset in subPresets" :key="preset.name" type="button" @click="applySubPreset(preset)"><span :style="{background:preset.background,borderColor:preset.color}"></span>[[ preset.name ]]</button></div>
     <a-row :gutter="16">
       <a-col :xs="24" :md="12"><a-form-item label="Акцентный цвет"><a-input v-model="subAppearance.color" placeholder="#f46b17"></a-input></a-form-item></a-col>
       <a-col :xs="24" :md="12"><a-form-item label="Тема"><a-select v-model="subAppearance.theme"><a-select-option value="auto">Как у устройства</a-select-option><a-select-option value="dark">Тёмная</a-select-option><a-select-option value="light">Светлая</a-select-option></a-select></a-form-item></a-col>
@@ -13,12 +14,23 @@
       <a-col :xs="24"><a-form-item label="Заголовок"><a-input v-model="subAppearance.heading" placeholder="Ваша подписка"></a-input></a-form-item></a-col>
       <a-col :xs="24"><a-form-item label="Инструкция"><a-textarea v-model="subAppearance.instruction" :rows="4" placeholder="Как подключиться к сервису"></a-textarea></a-form-item></a-col>
     </a-row>
-    <div :style="{ padding: '20px', marginBottom: '16px', background: subAppearance.background || (subAppearance.theme === 'light' ? '#f5f5f5' : '#101010'), color: subAppearance.text || (subAppearance.theme === 'light' ? '#202020' : '#f5f5f5'), borderRadius: subAppearance.radius + 'px' }">
-      <img v-if="subAppearance.logo" :src="subAppearance.logo" alt="" style="max-width: 100px; max-height: 48px; object-fit: contain">
-      <div :style="{marginTop: '12px', padding: '16px', background: subAppearance.surface || (subAppearance.theme === 'light' ? '#fff' : '#202020'), borderRadius: subAppearance.radius + 'px'}">
-        <h3 :style="{color: 'inherit'}">[[ subAppearance.heading || 'Ваша подписка' ]]</h3>
-        <p>[[ subAppearance.instruction || 'Выберите сервер и приложение для подключения.' ]]</p>
-        <span :style="{display: 'inline-block', padding: '8px 14px', color: '#fff', background: subAppearance.color, borderRadius: subAppearance.radius + 'px'}">Подключиться</span>
+    <div class="sub-preview-toolbar"><strong>Предпросмотр</strong><a-radio-group v-model="subPreviewMobile" size="small"><a-radio-button :value="false">Компьютер</a-radio-button><a-radio-button :value="true">Телефон</a-radio-button></a-radio-group></div>
+    <div class="sub-preview-viewport" :style="{width:subPreviewMobile ? '360px' : '100%', maxWidth:'100%'}">
+      <div class="sub-preview-page" :style="{background:subAppearance.background || (subAppearance.theme === 'light' ? '#f5f5f3' : '#171917'),color:subAppearance.text || (subAppearance.theme === 'light' ? '#232323' : '#e9ebe7'),borderRadius:subAppearance.radius + 'px'}">
+        <img v-if="subAppearance.logo" :src="subAppearance.logo" alt="" class="sub-preview-logo">
+        <small :style="{color:subAppearance.color}">[[ allSetting.subTitle || 'WDTT' ]]</small>
+        <h3 :style="{color:'inherit'}">[[ subAppearance.heading || 'Ваша подписка' ]]</h3>
+        <div class="sub-preview-panel" :style="{background:subAppearance.surface || (subAppearance.theme === 'light' ? '#fff' : '#20231f'),borderRadius:subAppearance.radius + 'px'}">
+          <div class="sub-preview-row"><strong>Подписка</strong><span :style="{color:subAppearance.color}">Активна</span></div>
+          <code>https://example.com/sub/demo</code>
+          <div class="sub-preview-row"><span>Трафик</span><strong>12 ГБ / 100 ГБ</strong></div>
+          <div class="sub-preview-progress"><span :style="{background:subAppearance.color}"></span></div>
+        </div>
+        <div v-if="subAppearance.instruction" class="sub-preview-panel" :style="{background:subAppearance.surface || (subAppearance.theme === 'light' ? '#fff' : '#20231f'),borderRadius:subAppearance.radius + 'px',whiteSpace:'pre-wrap'}">[[ subAppearance.instruction ]]</div>
+        <div class="sub-preview-panel" :style="{background:subAppearance.surface || (subAppearance.theme === 'light' ? '#fff' : '#20231f'),borderRadius:subAppearance.radius + 'px'}">
+          <button type="button" class="sub-preview-node" @click="subPreviewNodeOpen = !subPreviewNodeOpen">Нода NL · 7 приложений <span>[[ subPreviewNodeOpen ? '⌄' : '›' ]]</span></button>
+          <div v-if="subPreviewNodeOpen" class="sub-preview-app">iOS · VK Turn Proxy <code>wdtt://node.example:56000:…#node-nl</code></div>
+        </div>
       </div>
     </div>
     <a-button type="primary" @click="saveSubAppearance">Сохранить оформление</a-button>

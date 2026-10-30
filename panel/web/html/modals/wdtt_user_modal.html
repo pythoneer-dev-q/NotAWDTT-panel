@@ -152,7 +152,6 @@
   </a-tabs>
 </a-modal>
 <script>
-  const WDTT_PASS_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
 
   const userModal = {
     visible: false,
@@ -438,16 +437,9 @@
         this.drawQrCanvas('wdtt-user-sub-qr', this.userForm.sub_url, 'subQrInstance', 188);
       },
       genPassword() {
-        const arr = new Uint32Array(16);
-        if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
-          window.crypto.getRandomValues(arr);
-          return Array.from(arr, v => WDTT_PASS_CHARS[v % WDTT_PASS_CHARS.length]).join('');
-        }
-        let out = '';
-        for (let i = 0; i < 16; i++) {
-          out += WDTT_PASS_CHARS[Math.floor(Math.random() * WDTT_PASS_CHARS.length)];
-        }
-        return out;
+        if (!window.crypto || typeof window.crypto.getRandomValues !== 'function') return '';
+        const bytes = window.crypto.getRandomValues(new Uint8Array(32));
+        return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
       },
       setExpiryDays(days) {
         this.userForm.unlimited = false;
@@ -457,6 +449,7 @@
       },
       regenPassword() {
         this.userForm.password = this.genPassword();
+        if (!this.userForm.password) Vue.prototype.$message.error('Не удалось получить криптографически случайный пароль');
       },
       async createVkHashFromCreator() {
         if (this.userModal.isMain) return;

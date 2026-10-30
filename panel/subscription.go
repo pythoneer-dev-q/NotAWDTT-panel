@@ -141,6 +141,22 @@ func (a *App) buildSubURL(subID string) string {
 	return fmt.Sprintf("%s://%s%s%s", scheme, host, path, subID)
 }
 
+// A user page renders many subscription links; resolve the public endpoint once.
+func (a *App) pageSubURLBuilder() func(string) string {
+	base := strings.TrimSpace(a.cfg.SubURI)
+	if base == "" {
+		scheme, host := a.subPublicEndpoint()
+		base = fmt.Sprintf("%s://%s%s", scheme, host, normalizeSubPath(a.cfg.SubPath))
+	}
+	base = strings.TrimRight(base, "/") + "/"
+	return func(id string) string {
+		if id = strings.TrimSpace(id); id != "" {
+			return base + id
+		}
+		return ""
+	}
+}
+
 func (a *App) subPublicEndpoint() (scheme, hostWithPort string) {
 	scheme = "http"
 	certFile := strings.TrimSpace(a.cfg.SubCertFile)

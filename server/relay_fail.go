@@ -8,45 +8,26 @@ import (
 	"time"
 )
 
-// После рестарта iOS часто шлёт WRAP со старых TURN relay; DTLS там не поднимается.
-// Укороченный timeout и сброс счётчика после успеха ускоряют переход на новые relay.
-// Базовый timeout берётся из панели (handshake_timeout_sec) → dtlsHandshakeTimeout.
+// Неудачные DTLS подключения через TURN учитываются только для диагностики.
+// Повторная попытка всегда получает полный timeout из настройки панели.
 
 const (
-	relayDropAfterFails   = 3
+	relayFailTTL          = time.Minute
 	relayFailMapClearSize = 8000
 )
 
+type relayFailure struct {
+	count int
+	last  time.Time
+}
+
 var (
 	relayFailMu     sync.Mutex
-	relayFailCounts = map[string]int{}
+	relayFailCounts = map[string]relayFailure{}
 )
 
 func relayHandshakeTimeoutFor(addr net.Addr) time.Duration {
-	base := dtlsHandshakeTimeout
-	if addr == nil {
-		return base
-	}
-	relayFailMu.Lock()
-	fails := relayFailCounts[addr.String()]
-	relayFailMu.Unlock()
-
-	switch {
-	case fails >= 2:
-		t := base / 4
-		if t < 5*time.Second {
-			return 5 * time.Second
-		}
-		return t
-	case fails >= 1:
-		t := base / 2
-		if t < 8*time.Second {
-			return 8 * time.Second
-		}
-		return t
-	default:
-		return base
-	}
+	return dtlsHandshakeTimeout
 }
 
 func relayNoteHandshakeFail(addr net.Addr) {
@@ -55,11 +36,21 @@ func relayNoteHandshakeFail(addr net.Addr) {
 	}
 	key := addr.String()
 	relayFailMu.Lock()
-	relayFailCounts[key]++
-	n := relayFailCounts[key]
+	if _, known := relayFailCounts[key]; !known && len(relayFailCounts) >= relayFailMapClearSize {
+		relayFailMu.Unlock()
+		return
+	}
+	state := relayFailCounts[key]
+	if time.Since(state.last) > relayFailTTL {
+		state.count = 0
+	}
+	state.count++
+	state.last = time.Now()
+	relayFailCounts[key] = state
+	n := state.count
 	relayFailMu.Unlock()
-	if n == 1 || n == relayDropAfterFails {
-		log.Printf("[RELAY] Stale TURN relay %s: %d DTLS handshake fail(s), fast-fail enabled", key, n)
+	if n == 1 || n == 3 {
+		log.Printf("[RELAY] TURN relay %s: %d DTLS handshake fail(s) within %s; retries remain allowed", key, n, relayFailTTL)
 	}
 }
 
@@ -73,18 +64,8 @@ func relayNoteHandshakeOK(addr net.Addr) {
 	relayFailMu.Unlock()
 }
 
-func relayShouldDrop(addr net.Addr) bool {
-	if addr == nil {
-		return false
-	}
-	relayFailMu.Lock()
-	fails := relayFailCounts[addr.String()]
-	relayFailMu.Unlock()
-	return fails >= relayDropAfterFails
-}
-
 func relayFailJanitor(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Minute)
+	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
 		select {
@@ -93,9 +74,13 @@ func relayFailJanitor(ctx context.Context) {
 		case <-ticker.C:
 			relayFailMu.Lock()
 			n := len(relayFailCounts)
+			for key, state := range relayFailCounts {
+				if time.Since(state.last) > relayFailTTL {
+					delete(relayFailCounts, key)
+				}
+			}
 			if n > relayFailMapClearSize {
-				relayFailCounts = map[string]int{}
-				log.Printf("[RELAY] Cleared %d stale relay fail entries", n)
+				log.Printf("[RELAY] Cleared stale relay fail entries: %d -> %d", n, len(relayFailCounts))
 			}
 			relayFailMu.Unlock()
 		}

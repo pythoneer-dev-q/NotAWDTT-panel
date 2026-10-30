@@ -1,6 +1,10 @@
 {{define "component/sidebar/wdttContent"}}
 <template>
     <div class="ant-sidebar">
+        <div class="wdtt-mobile-topbar">
+            <button class="wdtt-mobile-menu-button" type="button" aria-label="Открыть меню" @click="toggleDrawer"><a-icon type="menu"></a-icon></button>
+            <strong>{{ projectName }}</strong>
+        </div>
         <a-layout-sider :theme="themeSwitcher.currentTheme" collapsible :collapsed="collapsed"
             @collapse="(isCollapsed, type) => collapseHandle(isCollapsed, type)" breakpoint="md">
             <div class="wdtt-side-brand"><span class="wdtt-side-mark" aria-hidden="true"></span><span v-if="!collapsed"><strong>{{ projectName }}</strong><small>CONTROL PANEL</small></span></div>
@@ -17,9 +21,6 @@
         <a-drawer placement="left" :closable="false" @close="closeDrawer" :visible="visible"
             :wrap-class-name="themeSwitcher.currentTheme" :wrap-style="{ padding: 0 }" :style="{ height: '100%' }">
             <div class="wdtt-side-brand"><span class="wdtt-side-mark" aria-hidden="true"></span><span><strong>{{ projectName }}</strong><small>CONTROL PANEL</small></span></div>
-            <div class="drawer-handle" @click="toggleDrawer" slot="handle">
-                <a-icon :type="visible ? 'close' : 'menu-fold'"></a-icon>
-            </div>
             <a-theme-switch></a-theme-switch>
             <a-menu :theme="themeSwitcher.currentTheme" mode="inline" :selected-keys="activeTab"
                 @click="({key}) => openLink(key)">

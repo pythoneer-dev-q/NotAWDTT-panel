@@ -52,6 +52,9 @@ func (cfg *PanelConfig) defaultLinkHost(publicIP string) string {
 }
 
 func (a *App) defaultLinkHost() string {
+	if d := a.cfg.panelDomain(); d != "" {
+		return d
+	}
 	return a.cfg.defaultLinkHost(a.serverIP())
 }
 

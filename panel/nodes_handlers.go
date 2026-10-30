@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -96,6 +97,9 @@ func (a *App) handleNodesList(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if n.IsLocal {
+			status := getCachedServerStatus()
+			n.CPUPercent = status.CPU
+			n.MemoryUsed, n.MemoryTotal = status.Mem.Current, status.Mem.Total
 			if n.Host == "" {
 				n.Host = srvIP
 			}
@@ -418,6 +422,9 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		CertSHA256       string                     `json:"cert_sha256"`
 		Version          string                     `json:"version"`
 		BuildCommit      string                     `json:"build_commit"`
+		CPUPercent       float64                    `json:"cpu_percent"`
+		MemoryUsed       uint64                     `json:"memory_used"`
+		MemoryTotal      uint64                     `json:"memory_total"`
 		Users            []paneldb.NodeUserPresence `json:"users"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
@@ -434,7 +441,8 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		req.TrafficUp > 1<<60 || req.TrafficDown > 1<<60 ||
 		(req.CertSHA256 != "" && !certFingerprintPattern.MatchString(req.CertSHA256)) ||
 		!nodeVersionPattern.MatchString(req.Version) ||
-		(req.BuildCommit != "" && !buildCommitPattern.MatchString(req.BuildCommit)) {
+		(req.BuildCommit != "" && !buildCommitPattern.MatchString(req.BuildCommit)) ||
+		math.IsNaN(req.CPUPercent) || math.IsInf(req.CPUPercent, 0) || req.CPUPercent < 0 || req.CPUPercent > 100 || req.MemoryUsed > req.MemoryTotal {
 		jsonError(w, "invalid node status", http.StatusBadRequest)
 		return
 	}
@@ -455,18 +463,15 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(req.Users) > 0 {
-		if panelDBEnabled() {
-			_ = paneldb.BumpUsersRev(panelDB)
-		}
 		invalidatePasswordsCache()
-		broadcastServerStatusEvent()
 	}
 
 	if req.TrafficUpTotal != nil {
+		metrics := paneldb.NodeMetrics{CPUPercent: req.CPUPercent, MemoryUsed: req.MemoryUsed, MemoryTotal: req.MemoryTotal}
 		err = m.UpdateNodeHeartbeatCumulative(ctx, node.ApiKey, req.OnlineUsers, req.TrafficUp, req.TrafficDown,
-			*req.TrafficUpTotal, *req.TrafficDownTotal, req.CertSHA256, req.Version, req.BuildCommit)
+			*req.TrafficUpTotal, *req.TrafficDownTotal, req.CertSHA256, req.Version, req.BuildCommit, metrics)
 	} else {
-		err = m.UpdateNodeHeartbeat(ctx, node.ApiKey, req.OnlineUsers, req.TrafficUp, req.TrafficDown, req.CertSHA256, req.Version, req.BuildCommit)
+		err = m.UpdateNodeHeartbeat(ctx, node.ApiKey, req.OnlineUsers, req.TrafficUp, req.TrafficDown, req.CertSHA256, req.Version, req.BuildCommit, paneldb.NodeMetrics{CPUPercent: req.CPUPercent, MemoryUsed: req.MemoryUsed, MemoryTotal: req.MemoryTotal})
 	}
 	if err != nil {
 		jsonError(w, err.Error(), 404)

@@ -3,6 +3,7 @@ package panel
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -20,6 +21,33 @@ var mongoUserCountsCache struct {
 	mongo                *paneldb.MongoDB
 	at                   time.Time
 	all, active, blocked int64
+	refreshing           bool
+}
+
+func refreshMongoUserCounts(m *paneldb.MongoDB, activeFilter bson.M) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	users := m.Database().Collection("users")
+	all, err := users.CountDocuments(ctx, bson.M{})
+	var active, blocked int64
+	if err == nil {
+		active, err = users.CountDocuments(ctx, activeFilter)
+	}
+	if err == nil {
+		blocked, err = users.CountDocuments(ctx, bson.M{"is_deactivated": true})
+	}
+	if err != nil {
+		log.Printf("[users] MongoDB summary count unavailable: %v", err)
+	}
+	mongoUserCountsCache.Lock()
+	defer mongoUserCountsCache.Unlock()
+	if mongoUserCountsCache.mongo == m {
+		if err == nil {
+			mongoUserCountsCache.all, mongoUserCountsCache.active, mongoUserCountsCache.blocked = all, active, blocked
+		}
+		mongoUserCountsCache.at = time.Now()
+		mongoUserCountsCache.refreshing = false
+	}
 }
 
 // The paged UI must query a bounded page instead of materializing LoadStore.
@@ -64,30 +92,30 @@ func (a *App) handleMongoUsersPage(w http.ResponseWriter, r *http.Request, m *pa
 		search := bson.M{"$or": bson.A{bson.M{"_id": re}, bson.M{"comment": re}, bson.M{"vk_hash": re}, bson.M{"device_id": re}, bson.M{"device_ids": re}}}
 		filter = bson.M{"$and": bson.A{filter, search}}
 	}
-	total, err := users.CountDocuments(ctx, filter)
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	var total int64
+	if query == "" && (status == "all" || status == "") {
+		total, err = users.CountDocuments(ctx, bson.M{})
+	} else {
+		total, err = users.CountDocuments(ctx, filter)
+	}
 	if err != nil {
 		jsonError(w, "users count: "+err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	mongoUserCountsCache.Lock()
-	if mongoUserCountsCache.mongo != m || time.Since(mongoUserCountsCache.at) > 30*time.Second {
-		all, countErr := users.CountDocuments(ctx, bson.M{})
-		if countErr == nil {
-			var activeCount, blocked int64
-			activeCount, countErr = users.CountDocuments(ctx, active)
-			if countErr == nil {
-				blocked, countErr = users.CountDocuments(ctx, bson.M{"is_deactivated": true})
-			}
-			if countErr == nil {
-				mongoUserCountsCache.mongo, mongoUserCountsCache.at = m, time.Now()
-				mongoUserCountsCache.all, mongoUserCountsCache.active, mongoUserCountsCache.blocked = all, activeCount, blocked
-			}
-		}
-		if countErr != nil {
-			mongoUserCountsCache.Unlock()
-			jsonError(w, "users count: "+countErr.Error(), http.StatusServiceUnavailable)
-			return
-		}
+	if mongoUserCountsCache.mongo != m {
+		mongoUserCountsCache.mongo = m
+		mongoUserCountsCache.at = time.Time{}
+		mongoUserCountsCache.active, mongoUserCountsCache.blocked = -1, -1
+		mongoUserCountsCache.refreshing = false
+	}
+	if query == "" && (status == "" || status == "all") {
+		mongoUserCountsCache.all = total
+	}
+	if time.Since(mongoUserCountsCache.at) > 30*time.Second && !mongoUserCountsCache.refreshing {
+		mongoUserCountsCache.refreshing = true
+		go refreshMongoUserCounts(m, active)
 	}
 	all, activeCount, blocked := mongoUserCountsCache.all, mongoUserCountsCache.active, mongoUserCountsCache.blocked
 	mongoUserCountsCache.Unlock()
@@ -101,6 +129,7 @@ func (a *App) handleMongoUsersPage(w http.ResponseWriter, r *http.Request, m *pa
 	defer cur.Close(ctx)
 	inbound, _ := loadWdttInbound()
 	host := a.resolveLinkHost(inbound)
+	subURL := a.pageSubURLBuilder()
 	stats := loadServerStats()
 	db := &PasswordsDB{MainPassword: global.MainPassword, Passwords: make(map[string]*PasswordEntry)}
 	rows := make([]map[string]interface{}, 0, limit)
@@ -113,8 +142,8 @@ func (a *App) handleMongoUsersPage(w http.ResponseWriter, r *http.Request, m *pa
 		entry := &PasswordEntry{DeviceID: doc.DeviceID, DeviceIDs: doc.DeviceIDs, MaxDevices: doc.MaxDevices, ExpiresAt: doc.ExpiresAt, DownBytes: doc.DownBytes, UpBytes: doc.UpBytes, TotalBytes: doc.TotalBytes, MaxDownMBps: doc.MaxDownMBps, MaxUpMBps: doc.MaxUpMBps, IsDeactivated: doc.IsDeactivated, Comment: doc.Comment, Ports: doc.Ports, VkHash: doc.VkHash, SubID: doc.SubID, LastSeenAt: doc.LastSeenAt, NodeOnlineAt: doc.NodeOnlineAt}
 		db.Passwords[doc.Password] = entry
 		if doc.Password == db.MainPassword {
-			row := mainUserRow(db, stats, inbound, host, a.cfg.SubTitle, a.buildSubURL(entry.SubID))
-			a.enrichUserSub(row, entry)
+			row := mainUserRow(db, stats, inbound, host, a.cfg.SubTitle, subURL(entry.SubID))
+			row["sub_id"], row["sub_url"] = entry.SubID, subURL(entry.SubID)
 			rows = append(rows, row)
 			continue
 		}
@@ -130,7 +159,7 @@ func (a *App) handleMongoUsersPage(w http.ResponseWriter, r *http.Request, m *pa
 			"active": !entry.IsDeactivated && !isPasswordExpired(entry) && !trafficExceeded(entry),
 			"online": userOnline(doc.Password, deviceIDsDisplay(entry), false, stats, entry.NodeOnlineAt), "last_seen_at": entry.LastSeenAt,
 			"ports": entry.Ports, "dtls_port": dtls, "wg_port": wg, "client_port": client, "vk_hash": entry.VkHash,
-			"sub_id": entry.SubID, "sub_url": a.buildSubURL(entry.SubID), "link": buildWdttLink(host, doc.Password, a.cfg.SubTitle, entry.VkHash, entry, inbound, a.buildSubURL(entry.SubID)),
+			"sub_id": entry.SubID, "sub_url": subURL(entry.SubID), "link": buildWdttLink(host, doc.Password, a.cfg.SubTitle, entry.VkHash, entry, inbound, subURL(entry.SubID)),
 		})
 	}
 	if err := cur.Err(); err != nil {

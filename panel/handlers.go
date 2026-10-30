@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ildarmaga/wdtt/pkg/paneldb"
@@ -147,10 +148,16 @@ func (a *App) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 					totalDownRate += downRate
 					measuredNodes++
 				}
+				cpu, memoryUsed, memoryTotal := n.CPUPercent, n.MemoryUsed, n.MemoryTotal
+				if n.IsLocal {
+					s := getCachedServerStatus()
+					cpu, memoryUsed, memoryTotal = s.CPU, s.Mem.Current, s.Mem.Total
+				}
 				nodes = append(nodes, map[string]interface{}{
 					"id": n.ID, "name": n.Name, "host": n.Host, "online": active,
 					"enabled": n.IsActive, "users": n.OnlineUsers, "last_seen": n.LastSeenAt,
 					"up": n.TrafficUp, "down": n.TrafficDown,
+					"cpu_percent": cpu, "memory_used": memoryUsed, "memory_total": memoryTotal,
 					"speed_up": upRate, "speed_down": downRate, "speed_available": active && measured && !n.IsLocal,
 				})
 			}
@@ -207,15 +214,31 @@ func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) serverIP() string {
+	serverIPCache.Lock()
+	defer serverIPCache.Unlock()
+	if serverIPCache.value != "" && time.Since(serverIPCache.at) < 5*time.Minute {
+		return serverIPCache.value
+	}
 	out, _ := runCmd("curl", "-4", "-s", "--max-time", "3", "ifconfig.me")
 	if out != "" {
-		return strings.TrimSpace(out)
+		serverIPCache.value = strings.TrimSpace(out)
+		serverIPCache.at = time.Now()
+		return serverIPCache.value
 	}
 	out, _ = runCmd("hostname", "-I")
 	if fields := strings.Fields(out); len(fields) > 0 {
-		return fields[0]
+		serverIPCache.value = fields[0]
+	} else {
+		serverIPCache.value = "127.0.0.1"
 	}
-	return "127.0.0.1"
+	serverIPCache.at = time.Now()
+	return serverIPCache.value
+}
+
+var serverIPCache struct {
+	sync.Mutex
+	value string
+	at    time.Time
 }
 
 func (a *App) enrichUserSub(u map[string]interface{}, entry *PasswordEntry) {

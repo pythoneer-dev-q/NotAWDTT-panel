@@ -315,10 +315,10 @@
     },
     computed: {
       activeCount() {
-        return this.userCounts.active;
+        return this.userCounts.active >= 0 ? this.userCounts.active : '—';
       },
       blockedCount() {
-        return this.userCounts.blocked;
+        return this.userCounts.blocked >= 0 ? this.userCounts.blocked : '—';
       },
       expiredCount() {
         return this.users.filter(u => u.is_expired).length;
@@ -358,17 +358,11 @@
         window.wsClient.on('status', (payload) => {
           if (!payload || payload.usersRev === undefined) return;
           const rev = Number(payload.usersRev) || 0;
-          if (this.usersRev && rev > this.usersRev) {
-            if (this.nextUsersOffset <= 100 && !this.loadingMore) this.loadUsers().catch(console.error);
-          }
           this.usersRev = rev;
         });
       }
-      if (this.isRefreshEnabled) {
-        this.startDataRefreshLoop();
-      } else {
-        await this.loadUsers({ withSpinner: true });
-      }
+      await this.loadUsers({ withSpinner: true });
+      if (this.isRefreshEnabled) this.startDataRefreshLoop();
     },
     methods: {
       rowKey(row) {
@@ -439,6 +433,7 @@
         }
       },
       async loadUsers(options = {}) {
+        if (this.refreshing && !options.withSpinner) return;
         const withSpinner = options.withSpinner === true;
         const requestId = ++this.usersRequestId;
         this.refreshing = true;
@@ -446,13 +441,13 @@
           this.loadingStates.spinning = true;
         }
         const params = { limit: 100, offset: 0, q: (this.searchQuery || '').trim(), status: this.statusFilter };
-        const msg = await axios.get('panel/api/users', { params }).then(r => r.data).catch(() => null);
+        const msg = await axios.get('panel/api/users', { params, timeout: 12000 }).then(r => r.data).catch(error => ({ success: false, msg: error.response?.data?.msg || error.message || 'Сервер не ответил' }));
         if (requestId !== this.usersRequestId) return;
         if (!msg || !msg.success) {
           this.refreshing = false;
           if (withSpinner) this.loadingStates.spinning = false;
           if (!this.loadingStates.fetched) this.loadingStates.fetched = true;
-          if (withSpinner) this.$message.error((msg && msg.msg) || 'Не удалось загрузить пользователей');
+          this.$message.error((msg && msg.msg) || 'Не удалось загрузить пользователей');
           return;
         }
         this.users = msg.obj.users || [];
@@ -470,10 +465,8 @@
         if (!this.loadingStates.fetched) {
           this.loadingStates.fetched = true;
         }
-        setTimeout(() => {
-          this.refreshing = false;
-          if (withSpinner) this.loadingStates.spinning = false;
-        }, 500);
+        this.refreshing = false;
+        if (withSpinner) this.loadingStates.spinning = false;
       },
       async loadMoreUsers() {
         if (this.loadingMore || this.refreshing || this.nextUsersOffset >= this.usersTotal) return;
@@ -482,7 +475,7 @@
         this.loadingMore = true;
         try {
           const params = { limit: 100, offset, q: (this.searchQuery || '').trim(), status: this.statusFilter };
-          const msg = await axios.get('panel/api/users', { params }).then(r => r.data);
+          const msg = await axios.get('panel/api/users', { params, timeout: 12000 }).then(r => r.data);
           if (requestId !== this.usersRequestId) return;
           if (!msg.success || !msg.obj) throw new Error(msg.msg || 'Ошибка загрузки');
           const existing = new Set(this.users.map(this.rowKey));

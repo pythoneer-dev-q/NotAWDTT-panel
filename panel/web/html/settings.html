@@ -213,6 +213,14 @@
       themeSwitcher,
       vkCreatorLoaded: false,
       subAppearance: { color: '#f46b17', theme: 'auto', radius: 16, logo: '', background: '', surface: '', text: '', heading: '', instruction: '' },
+      subPreviewMobile: false,
+      subPreviewNodeOpen: true,
+      subPresets: [
+        { name: 'Графит', color: '#f46b17', theme: 'dark', background: '#171917', surface: '#20231f', text: '#e9ebe7', radius: 18 },
+        { name: 'Ночной синий', color: '#3488f5', theme: 'dark', background: '#101621', surface: '#1c2534', text: '#f4f7ff', radius: 22 },
+        { name: 'Светлый', color: '#da5b15', theme: 'light', background: '#f5f5f3', surface: '#ffffff', text: '#232323', radius: 16 },
+        { name: 'Минимализм', color: '#8465d8', theme: 'light', background: '#f8f7fb', surface: '#ffffff', text: '#24212b', radius: 8 },
+      ],
       accentColor: WdttAccent.get(),
       accentOptions: [
         { key: 'orange', label: 'Оранжевый', color: '#f46b17' },
@@ -342,6 +350,9 @@
       },
     },
     methods: {
+      applySubPreset(preset) {
+        this.subAppearance = Object.assign({}, this.subAppearance, { color: preset.color, theme: preset.theme, background: preset.background, surface: preset.surface, text: preset.text, radius: preset.radius });
+      },
       async onSettingsTabChange(key) {
         if (String(key) === '4' && !this.vkCreatorLoaded) {
           this.vkCreatorLoaded = true;

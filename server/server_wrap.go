@@ -398,10 +398,6 @@ func (c *wrapPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 		return 0, addr, err
 	}
 	raw := buf[:n]
-	if relayShouldDrop(addr) {
-		return 0, addr, errors.New("relay stale: dropped")
-	}
-
 	if atomic.LoadInt32(&c.selected) == 0 {
 		key, m, pass, uErr := c.keys.Unwrap(raw, p)
 		if uErr != nil {

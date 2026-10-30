@@ -403,7 +403,10 @@ func botLoop(token string, adminIDstr string, wgDev *device.Device) {
 				}
 				newPass := ""
 				for i := 0; i < 10; i++ {
-					candidate := generatePassword()
+					candidate, err := generatePassword()
+					if err != nil {
+						break
+					}
 					if _, exists := db.Passwords[candidate]; !exists {
 						newPass = candidate
 						break

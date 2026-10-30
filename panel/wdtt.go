@@ -2,6 +2,7 @@ package panel
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -126,8 +127,6 @@ func serverStatsFresh(s *ServerStats) bool {
 	}
 	return time.Now().Unix()-s.Timestamp <= serverStatsMaxAgeSec(s)
 }
-
-const passChars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
 
 func ensureMainPasswordEntry(db *PasswordsDB) {
 	if db == nil || db.MainPassword == "" {
@@ -459,14 +458,12 @@ func updateWdttPassword(pass string) error {
 	return applyWdttConfigChangeHotOnly()
 }
 
-func genPassword() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	out := make([]byte, 16)
-	for i := range out {
-		out[i] = passChars[int(b[i])%len(passChars)]
+func genPassword() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
 	}
-	return string(out)
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func validPassword(pw string) bool {
@@ -482,7 +479,11 @@ func createUser(password string, entry *PasswordEntry) (string, error) {
 	}
 	normalizeEntryDevices(entry)
 	if password == "" {
-		password = genPassword()
+		generated, genErr := genPassword()
+		if genErr != nil {
+			return "", fmt.Errorf("generate password: %w", genErr)
+		}
+		password = generated
 	}
 	if !validPassword(password) {
 		return "", fmt.Errorf("пароль должен быть от 1 до 128 символов")

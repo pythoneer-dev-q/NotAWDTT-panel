@@ -24,24 +24,33 @@ const (
 
 // Node - VPS-нода для мультисерверной генерации и работы
 type Node struct {
-	ID                 string `bson:"_id" json:"id"`
-	Name               string `bson:"name" json:"name"`
-	Host               string `bson:"host" json:"host"`
-	DtlsPort           int    `bson:"dtls_port" json:"dtls_port"`
-	RawPort            int    `bson:"raw_port" json:"raw_port"`
-	ApiKey             string `bson:"api_key" json:"api_key"`
-	IsActive           bool   `bson:"is_active" json:"is_active"`
-	IsLocal            bool   `bson:"is_local" json:"is_local"`
-	LastSeenAt         int64  `bson:"last_seen_at" json:"last_seen_at"`
-	InstallRequestedAt int64  `bson:"install_requested_at" json:"install_requested_at"`
-	CertSHA256         string `bson:"cert_sha256" json:"cert_sha256"`
-	Version            string `bson:"version,omitempty" json:"version,omitempty"`
-	BuildCommit        string `bson:"build_commit,omitempty" json:"build_commit,omitempty"`
-	Status             string `bson:"status" json:"status"` // "online", "offline"
-	OnlineUsers        int    `bson:"online_users" json:"online_users"`
-	TrafficUp          int64  `bson:"traffic_up" json:"traffic_up"`
-	TrafficDown        int64  `bson:"traffic_down" json:"traffic_down"`
-	CreatedAt          int64  `bson:"created_at" json:"created_at"`
+	ID                 string  `bson:"_id" json:"id"`
+	Name               string  `bson:"name" json:"name"`
+	Host               string  `bson:"host" json:"host"`
+	DtlsPort           int     `bson:"dtls_port" json:"dtls_port"`
+	RawPort            int     `bson:"raw_port" json:"raw_port"`
+	ApiKey             string  `bson:"api_key" json:"api_key"`
+	IsActive           bool    `bson:"is_active" json:"is_active"`
+	IsLocal            bool    `bson:"is_local" json:"is_local"`
+	LastSeenAt         int64   `bson:"last_seen_at" json:"last_seen_at"`
+	InstallRequestedAt int64   `bson:"install_requested_at" json:"install_requested_at"`
+	CertSHA256         string  `bson:"cert_sha256" json:"cert_sha256"`
+	Version            string  `bson:"version,omitempty" json:"version,omitempty"`
+	BuildCommit        string  `bson:"build_commit,omitempty" json:"build_commit,omitempty"`
+	Status             string  `bson:"status" json:"status"` // "online", "offline"
+	OnlineUsers        int     `bson:"online_users" json:"online_users"`
+	TrafficUp          int64   `bson:"traffic_up" json:"traffic_up"`
+	TrafficDown        int64   `bson:"traffic_down" json:"traffic_down"`
+	CPUPercent         float64 `bson:"cpu_percent" json:"cpu_percent"`
+	MemoryUsed         uint64  `bson:"memory_used" json:"memory_used"`
+	MemoryTotal        uint64  `bson:"memory_total" json:"memory_total"`
+	CreatedAt          int64   `bson:"created_at" json:"created_at"`
+}
+
+type NodeMetrics struct {
+	CPUPercent  float64 `json:"cpu_percent"`
+	MemoryUsed  uint64  `json:"memory_used"`
+	MemoryTotal uint64  `json:"memory_total"`
 }
 
 type MongoGlobalDoc struct {
@@ -52,27 +61,28 @@ type MongoGlobalDoc struct {
 }
 
 type MongoInboundDoc struct {
-	ID                  int    `bson:"_id" json:"id"`
-	Tag                 string `bson:"tag" json:"tag"`
-	Remark              string `bson:"remark" json:"remark"`
-	Enable              bool   `bson:"enable" json:"enable"`
-	ListenHost          string `bson:"listen_host" json:"listen_host"`
-	ServerHost          string `bson:"server_host" json:"server_host"`
-	DtlsPort            int    `bson:"dtls_port" json:"dtls_port"`
-	WgPort              int    `bson:"wg_port" json:"wg_port"`
-	ClientPort          int    `bson:"client_port" json:"client_port"`
-	DNS                 string `bson:"dns" json:"dns"`
-	MTU                 int    `bson:"mtu" json:"mtu"`
-	MaxUsers            int    `bson:"max_users" json:"max_users"`
-	HandshakeTimeoutSec int    `bson:"handshake_timeout_sec" json:"handshake_timeout_sec"`
-	MaxDtlsPerDevice    int    `bson:"max_dtls_per_device" json:"max_dtls_per_device"`
-	OnlineTimeoutSec    int    `bson:"online_timeout_sec" json:"online_timeout_sec"`
-	WgKeepaliveSec      int    `bson:"wg_keepalive_sec" json:"wg_keepalive_sec"`
-	StatsIntervalSec    int    `bson:"stats_interval_sec" json:"stats_interval_sec"`
-	AdminAddr           string `bson:"admin_addr" json:"admin_addr"`
-	RawEnable           bool   `bson:"raw_enable" json:"raw_enable"`
-	RawDirectPort       int    `bson:"raw_direct_port" json:"raw_direct_port"`
-	WgEnable            bool   `bson:"wg_enable" json:"wg_enable"`
+	ID                     int    `bson:"_id" json:"id"`
+	Tag                    string `bson:"tag" json:"tag"`
+	Remark                 string `bson:"remark" json:"remark"`
+	Enable                 bool   `bson:"enable" json:"enable"`
+	ListenHost             string `bson:"listen_host" json:"listen_host"`
+	ServerHost             string `bson:"server_host" json:"server_host"`
+	DtlsPort               int    `bson:"dtls_port" json:"dtls_port"`
+	WgPort                 int    `bson:"wg_port" json:"wg_port"`
+	ClientPort             int    `bson:"client_port" json:"client_port"`
+	DNS                    string `bson:"dns" json:"dns"`
+	MTU                    int    `bson:"mtu" json:"mtu"`
+	MaxUsers               int    `bson:"max_users" json:"max_users"`
+	LegacyMaxUsersMigrated bool   `bson:"legacy_max_users_migrated,omitempty" json:"-"`
+	HandshakeTimeoutSec    int    `bson:"handshake_timeout_sec" json:"handshake_timeout_sec"`
+	MaxDtlsPerDevice       int    `bson:"max_dtls_per_device" json:"max_dtls_per_device"`
+	OnlineTimeoutSec       int    `bson:"online_timeout_sec" json:"online_timeout_sec"`
+	WgKeepaliveSec         int    `bson:"wg_keepalive_sec" json:"wg_keepalive_sec"`
+	StatsIntervalSec       int    `bson:"stats_interval_sec" json:"stats_interval_sec"`
+	AdminAddr              string `bson:"admin_addr" json:"admin_addr"`
+	RawEnable              bool   `bson:"raw_enable" json:"raw_enable"`
+	RawDirectPort          int    `bson:"raw_direct_port" json:"raw_direct_port"`
+	WgEnable               bool   `bson:"wg_enable" json:"wg_enable"`
 }
 
 type MongoUserDoc struct {
@@ -298,7 +308,7 @@ func (m *MongoDB) DeleteNode(ctx context.Context, id string) error {
 	return err
 }
 
-func (m *MongoDB) UpdateNodeHeartbeat(ctx context.Context, apiKey string, onlineUsers int, upDelta, downDelta int64, certSHA256, version, buildCommit string) error {
+func (m *MongoDB) UpdateNodeHeartbeat(ctx context.Context, apiKey string, onlineUsers int, upDelta, downDelta int64, certSHA256, version, buildCommit string, metrics NodeMetrics) error {
 	coll := m.db.Collection("nodes")
 	now := time.Now().Unix()
 	update := bson.M{
@@ -309,6 +319,9 @@ func (m *MongoDB) UpdateNodeHeartbeat(ctx context.Context, apiKey string, online
 			"cert_sha256":  certSHA256,
 			"version":      version,
 			"build_commit": buildCommit,
+			"cpu_percent":  metrics.CPUPercent,
+			"memory_used":  metrics.MemoryUsed,
+			"memory_total": metrics.MemoryTotal,
 		},
 		"$inc": bson.M{
 			"traffic_up":   upDelta,
@@ -327,7 +340,7 @@ func (m *MongoDB) UpdateNodeHeartbeat(ctx context.Context, apiKey string, online
 
 // UpdateNodeHeartbeatCumulative updates node totals idempotently. The deltas are
 // only used to bridge the first heartbeat from an older node version.
-func (m *MongoDB) UpdateNodeHeartbeatCumulative(ctx context.Context, apiKey string, onlineUsers int, upDelta, downDelta, upTotal, downTotal int64, certSHA256, version, buildCommit string) error {
+func (m *MongoDB) UpdateNodeHeartbeatCumulative(ctx context.Context, apiKey string, onlineUsers int, upDelta, downDelta, upTotal, downTotal int64, certSHA256, version, buildCommit string, metrics NodeMetrics) error {
 	coll := m.db.Collection("nodes")
 	now := time.Now().Unix()
 	initialUp := upTotal - upDelta
@@ -347,6 +360,9 @@ func (m *MongoDB) UpdateNodeHeartbeatCumulative(ctx context.Context, apiKey stri
 		"cert_sha256":  certSHA256,
 		"version":      version,
 		"build_commit": buildCommit,
+		"cpu_percent":  metrics.CPUPercent,
+		"memory_used":  metrics.MemoryUsed,
+		"memory_total": metrics.MemoryTotal,
 		"traffic_up": bson.M{"$add": bson.A{
 			bson.M{"$ifNull": bson.A{"$traffic_up", int64(0)}},
 			bson.M{"$max": bson.A{int64(0), bson.M{"$subtract": bson.A{upTotal, previousUp}}}},
@@ -697,7 +713,7 @@ func (m *MongoDB) LoadInbound(ctx context.Context) (*Inbound, error) {
 			ClientPort:          9000,
 			DNS:                 "1.1.1.1",
 			MTU:                 1280,
-			MaxUsers:            100,
+			MaxUsers:            64768,
 			HandshakeTimeoutSec: 30,
 			MaxDtlsPerDevice:    0,
 			OnlineTimeoutSec:    15,
@@ -710,6 +726,15 @@ func (m *MongoDB) LoadInbound(ctx context.Context) (*Inbound, error) {
 		}
 		_ = m.SaveInbound(ctx, in)
 		return in, nil
+	}
+	// MongoDB installations created with the former 100-user default need the
+	// same address capacity as the existing /16 WireGuard pool.
+	if doc.MaxUsers == 100 && !doc.LegacyMaxUsersMigrated {
+		filter := bson.M{"_id": 1, "max_users": 100, "legacy_max_users_migrated": bson.M{"$ne": true}}
+		update := bson.M{"$set": bson.M{"max_users": 64768, "legacy_max_users_migrated": true}}
+		if result, err := m.db.Collection("inbound").UpdateOne(ctx, filter, update); err == nil && result.MatchedCount == 1 {
+			doc.MaxUsers = 64768
+		}
 	}
 	return &Inbound{
 		Tag:                 doc.Tag,
@@ -740,27 +765,28 @@ func (m *MongoDB) SaveInbound(ctx context.Context, in *Inbound) error {
 		return fmt.Errorf("nil inbound")
 	}
 	doc := MongoInboundDoc{
-		ID:                  1,
-		Tag:                 in.Tag,
-		Remark:              in.Remark,
-		Enable:              in.Enable,
-		ListenHost:          in.ListenHost,
-		ServerHost:          in.ServerHost,
-		DtlsPort:            in.DtlsPort,
-		WgPort:              in.WgPort,
-		ClientPort:          in.ClientPort,
-		DNS:                 in.DNS,
-		MTU:                 in.MTU,
-		MaxUsers:            in.MaxUsers,
-		HandshakeTimeoutSec: in.HandshakeTimeoutSec,
-		MaxDtlsPerDevice:    in.MaxDtlsPerDevice,
-		OnlineTimeoutSec:    in.OnlineTimeoutSec,
-		WgKeepaliveSec:      in.WgKeepaliveSec,
-		StatsIntervalSec:    in.StatsIntervalSec,
-		AdminAddr:           in.AdminAddr,
-		RawEnable:           in.RawEnable,
-		RawDirectPort:       in.RawDirectPort,
-		WgEnable:            in.WgEnable,
+		ID:                     1,
+		Tag:                    in.Tag,
+		Remark:                 in.Remark,
+		Enable:                 in.Enable,
+		ListenHost:             in.ListenHost,
+		ServerHost:             in.ServerHost,
+		DtlsPort:               in.DtlsPort,
+		WgPort:                 in.WgPort,
+		ClientPort:             in.ClientPort,
+		DNS:                    in.DNS,
+		MTU:                    in.MTU,
+		MaxUsers:               in.MaxUsers,
+		LegacyMaxUsersMigrated: true,
+		HandshakeTimeoutSec:    in.HandshakeTimeoutSec,
+		MaxDtlsPerDevice:       in.MaxDtlsPerDevice,
+		OnlineTimeoutSec:       in.OnlineTimeoutSec,
+		WgKeepaliveSec:         in.WgKeepaliveSec,
+		StatsIntervalSec:       in.StatsIntervalSec,
+		AdminAddr:              in.AdminAddr,
+		RawEnable:              in.RawEnable,
+		RawDirectPort:          in.RawDirectPort,
+		WgEnable:               in.WgEnable,
 	}
 	_, err := m.db.Collection("inbound").UpdateOne(ctx,
 		bson.M{"_id": 1},

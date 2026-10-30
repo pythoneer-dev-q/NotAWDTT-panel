@@ -17,14 +17,15 @@
       <p>[[ node.host ]]</p><p>Пользователи онлайн: [[ node.online ? node.users : '—' ]]</p>
       <p>Трафик: ↓ [[ SizeFormatter.sizeFormat(node.down) ]] · ↑ [[ SizeFormatter.sizeFormat(node.up) ]]</p>
       <p>Скорость: [[ node.speed_available ? '↓ ' + SizeFormatter.sizeFormat(node.speed_down) + '/с · ↑ ' + SizeFormatter.sizeFormat(node.speed_up) + '/с' : 'нет данных' ]]</p>
+      <div class="data-node-metrics"><span>CPU <strong>[[ node.online && node.memory_total ? Number(node.cpu_percent || 0).toFixed(1) + '%' : '—' ]]</strong></span><span>RAM <strong>[[ node.memory_total ? SizeFormatter.sizeFormat(node.memory_used) + ' / ' + SizeFormatter.sizeFormat(node.memory_total) : '—' ]]</strong></span></div>
     </a-card></div><p v-if="!data.nodes.length" class="data-muted">[[ data.nodes_available ? 'Ноды ещё не добавлены' : 'Нет данных о нодах' ]]</p>
   </a-layout-content></a-layout>
 </a-layout>
 <style>
 .data-heading,.data-title,.data-node-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .data-heading { margin-bottom:20px; }.data-heading h1 { margin:0; font-size:26px; }.data-heading p,.data-muted,.data-node-grid p { opacity:.65; margin:4px 0; }
-.data-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }.data-grid strong { display:block; font-size:28px; margin-top:8px; }.data-label { opacity:.65; }
-.data-title { margin:24px 0 14px; }.data-title h2 { margin:0; }.data-node-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:14px; }.data-node-head strong { overflow-wrap:anywhere; }
+.data-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }.data-grid .ant-card { min-height:136px; border-radius:20px !important; }.data-grid .ant-card-body { display:flex; flex-direction:column; justify-content:space-between; min-height:134px; }.data-grid strong { display:block; font-size:30px; margin-top:16px; }.data-label { opacity:.65; font-size:13px; font-weight:600; }
+.data-title { margin:28px 0 14px; }.data-title h2 { margin:0; }.data-node-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:16px; }.data-node-grid .ant-card { border-radius:20px !important; }.data-node-grid .ant-card-body { display:grid; gap:8px; }.data-node-head strong { overflow-wrap:anywhere; font-size:17px; }.data-node-metrics { display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }.data-node-metrics span { flex:1; min-width:115px; padding:10px; border-radius:12px; background:rgba(127,127,127,.09); font-size:12px; }.data-node-metrics strong { display:block; margin-top:3px; font-size:15px; }
 @media(max-width:700px){ .data-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.data-node-grid { grid-template-columns:1fr; } }
 </style>
 {{ template "page/body_scripts" . }}

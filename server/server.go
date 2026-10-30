@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -128,25 +129,12 @@ var (
 
 var serverWrapKeys = newWrapKeyStore()
 
-const (
-	passChars            = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
-	generatedPasswordLen = 16
-)
-
-func generatePassword() string {
-	b := make([]byte, generatedPasswordLen)
-	randomBytes := make([]byte, len(b))
-	if _, err := rand.Read(randomBytes); err != nil {
-		now := time.Now().UnixNano()
-		for i := range b {
-			b[i] = passChars[int(now+int64(i))%len(passChars)]
-		}
-		return string(b)
+func generatePassword() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
 	}
-	for i, raw := range randomBytes {
-		b[i] = passChars[int(raw)%len(passChars)]
-	}
-	return string(b)
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 var publicIP string = ""
@@ -969,6 +957,7 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin, version
 			downDelta = 0
 		}
 		hbURL := masterURL + "/node/heartbeat"
+		cpuPercent, memoryUsed, memoryTotal := nodeHostMetrics()
 		hbBody, _ := json.Marshal(map[string]interface{}{
 			"online_users":       onlineUsers,
 			"traffic_up":         upDelta,
@@ -979,6 +968,9 @@ func StartNodeSyncWorker(ctx context.Context, masterURL, token, certPin, version
 			"version":            version,
 			"build_commit":       buildCommit,
 			"users":              presence,
+			"cpu_percent":        cpuPercent,
+			"memory_used":        memoryUsed,
+			"memory_total":       memoryTotal,
 		})
 		hbReq, err := http.NewRequestWithContext(ctx, http.MethodPost, hbURL, bytes.NewReader(hbBody))
 		if err != nil {

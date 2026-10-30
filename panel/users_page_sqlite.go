@@ -112,13 +112,14 @@ func (a *App) handleSQLiteUsersPage(w http.ResponseWriter, r *http.Request) {
 	}
 	inbound, _ := loadWdttInbound()
 	host := a.resolveLinkHost(inbound)
+	subURL := a.pageSubURLBuilder()
 	stats := loadServerStats()
 	rows := make([]map[string]interface{}, 0, len(keys))
 	for _, pass := range keys {
 		entry := db.Passwords[pass]
 		if pass == db.MainPassword {
-			row := mainUserRow(db, stats, inbound, host, a.cfg.SubTitle, a.buildSubURL(entry.SubID))
-			a.enrichUserSub(row, entry)
+			row := mainUserRow(db, stats, inbound, host, a.cfg.SubTitle, subURL(entry.SubID))
+			row["sub_id"], row["sub_url"] = entry.SubID, subURL(entry.SubID)
 			rows = append(rows, row)
 			continue
 		}
@@ -133,7 +134,7 @@ func (a *App) handleSQLiteUsersPage(w http.ResponseWriter, r *http.Request) {
 			"traffic_exceeded": trafficExceeded(entry), "is_expired": isPasswordExpired(entry), "is_deactivated": entry.IsDeactivated,
 			"active": !entry.IsDeactivated && !isPasswordExpired(entry) && !trafficExceeded(entry), "online": userOnline(pass, deviceIDsDisplay(entry), false, stats, entry.NodeOnlineAt), "last_seen_at": entry.LastSeenAt,
 			"ports": entry.Ports, "dtls_port": dtls, "wg_port": wg, "client_port": client, "vk_hash": entry.VkHash,
-			"sub_id": entry.SubID, "sub_url": a.buildSubURL(entry.SubID), "link": buildWdttLink(host, pass, a.cfg.SubTitle, entry.VkHash, entry, inbound, a.buildSubURL(entry.SubID)),
+			"sub_id": entry.SubID, "sub_url": subURL(entry.SubID), "link": buildWdttLink(host, pass, a.cfg.SubTitle, entry.VkHash, entry, inbound, subURL(entry.SubID)),
 		})
 	}
 	jsonOK(w, map[string]interface{}{"users": rows, "total": total, "counts": map[string]int64{"all": all, "active": activeCount, "blocked": blocked}, "nodes": []interface{}{}, "inbound": map[string]interface{}{"tag": inbound.Tag, "sub_title": a.cfg.SubTitle, "remark": inbound.Remark, "listen_host": inbound.ListenHost, "server_host": inbound.ServerHost, "default_link_host": a.defaultLinkHost(), "panel_tls": panelTLSEnabled(a.cfg), "dtls_port": inbound.DtlsPort, "wg_port": inbound.WgPort, "client_port": inbound.ClientPort, "dns": inbound.DNS, "max_users": inbound.MaxUsers}})

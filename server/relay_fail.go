@@ -9,11 +9,14 @@ import (
 )
 
 // Неудачные DTLS подключения через TURN учитываются только для диагностики.
-// Повторная попытка всегда получает полный timeout из настройки панели.
+// Повторные попытки допускаются; время каждой ограничено клиентским ожиданием.
 
 const (
 	relayFailTTL          = time.Minute
 	relayFailMapClearSize = 8000
+	// QWDTT gives up after about 10 seconds. Free server handshake slots before
+	// that deadline; successful TURN handshakes normally finish in milliseconds.
+	relayHandshakeMaxWait = 8 * time.Second
 )
 
 type relayFailure struct {
@@ -27,6 +30,9 @@ var (
 )
 
 func relayHandshakeTimeoutFor(addr net.Addr) time.Duration {
+	if dtlsHandshakeTimeout <= 0 || dtlsHandshakeTimeout > relayHandshakeMaxWait {
+		return relayHandshakeMaxWait
+	}
 	return dtlsHandshakeTimeout
 }
 

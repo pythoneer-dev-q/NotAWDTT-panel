@@ -14,16 +14,16 @@ func TestRelayFailuresExpireAndNeverPermanentlyBlock(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		relayNoteHandshakeFail(addr)
 	}
-	if got := relayHandshakeTimeoutFor(addr); got != 30*time.Second {
-		t.Fatalf("retry timeout shortened after failures: %s", got)
+	if got := relayHandshakeTimeoutFor(addr); got != relayHandshakeMaxWait {
+		t.Fatalf("unexpected handshake timeout after failures: %s", got)
 	}
 	relayFailMu.Lock()
 	state := relayFailCounts[addr.String()]
 	state.last = time.Now().Add(-relayFailTTL - time.Second)
 	relayFailCounts[addr.String()] = state
 	relayFailMu.Unlock()
-	if got := relayHandshakeTimeoutFor(addr); got != 30*time.Second {
-		t.Fatalf("relay did not recover after TTL: %s", got)
+	if got := relayHandshakeTimeoutFor(addr); got != relayHandshakeMaxWait {
+		t.Fatalf("unexpected handshake timeout after TTL: %s", got)
 	}
 	relayNoteHandshakeFail(addr)
 	relayFailMu.Lock()
@@ -31,5 +31,14 @@ func TestRelayFailuresExpireAndNeverPermanentlyBlock(t *testing.T) {
 	relayFailMu.Unlock()
 	if count != 1 {
 		t.Fatalf("expired failure count persisted: %d", count)
+	}
+}
+
+func TestRelayHandshakeTimeoutRespectsShorterConfiguredLimit(t *testing.T) {
+	oldBase := dtlsHandshakeTimeout
+	dtlsHandshakeTimeout = 4 * time.Second
+	defer func() { dtlsHandshakeTimeout = oldBase }()
+	if got := relayHandshakeTimeoutFor(nil); got != 4*time.Second {
+		t.Fatalf("configured timeout ignored: %s", got)
 	}
 }

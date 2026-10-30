@@ -78,11 +78,11 @@
     <a-divider>Расширенные параметры</a-divider>
     <a-form-item>
       <template slot="label">
-        <a-tooltip title="Таймаут установки DTLS-сессии в секундах (по умолчанию 30 сек)">
+        <a-tooltip title="Клиент ждёт около 10 секунд; сервер ограничивает установку DTLS 8 секундами, чтобы не задерживать новые подключения">
           DTLS handshake, сек <a-icon type="question-circle"></a-icon>
         </a-tooltip>
       </template>
-      <a-input-number v-model="inboundForm.handshake_timeout_sec" :min="5" :max="600" :style="{ width: '100%' }"></a-input-number>
+      <a-input-number v-model="inboundForm.handshake_timeout_sec" :min="5" :max="8" :style="{ width: '100%' }"></a-input-number>
     </a-form-item>
     <a-form-item>
       <template slot="label">

@@ -82,8 +82,9 @@ var (
 	wgMTU                 = defaultWgMTU
 )
 
-// Ограничение параллельных DTLS handshake (burst от multi-worker клиентов)
-var dtlsHandshakeSem = make(chan struct{}, 64)
+// Keep room for bursts of parallel TURN connections. A full semaphore is rejected
+// immediately in handleConn so a connection cannot wait here past the client's deadline.
+var dtlsHandshakeSem = make(chan struct{}, 512)
 
 // ==================== База данных и Бот ====================
 

@@ -33,7 +33,8 @@ func handleConn(ctx context.Context, clientConn net.Conn, wgEndpoint string, wgD
 
 	select {
 	case dtlsHandshakeSem <- struct{}{}:
-	case <-ctx.Done():
+	default:
+		log.Printf("[DTLS] Handshake capacity reached (%d); closing %s so the client can retry", cap(dtlsHandshakeSem), remoteAddr)
 		return
 	}
 	hsStart := time.Now()

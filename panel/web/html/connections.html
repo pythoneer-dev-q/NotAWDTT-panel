@@ -229,7 +229,7 @@
       this.dns = data.dns || '1.1.1.1';
       this.mtu = Number(data.mtu) || 1280;
       this.max_users = Number(data.max_users) || 64768;
-      this.handshake_timeout_sec = Number(data.handshake_timeout_sec) || 30;
+      this.handshake_timeout_sec = Math.min(Number(data.handshake_timeout_sec) || 8, 8);
       this.online_timeout_sec = Number(data.online_timeout_sec) || 15;
       this.wg_keepalive_sec = Number(data.wg_keepalive_sec) || 25;
       this.stats_interval_sec = Number(data.stats_interval_sec) || 2;
@@ -266,7 +266,7 @@
         dns: this.dns,
         mtu: Number(this.mtu) || 1280,
         max_users: Number(this.max_users),
-        handshake_timeout_sec: Number(this.handshake_timeout_sec) || 30,
+        handshake_timeout_sec: Math.min(Number(this.handshake_timeout_sec) || 8, 8),
         max_dtls_per_device: Number(this.max_dtls_per_device),
         online_timeout_sec: Number(this.online_timeout_sec) || 15,
         wg_keepalive_sec: Number(this.wg_keepalive_sec) || 25,

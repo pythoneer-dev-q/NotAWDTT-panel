@@ -63,8 +63,8 @@ func entryMaxDevices(entry *PasswordEntry) int {
 	if entry == nil || entry.MaxDevices < 1 {
 		return paneldb.DefaultMaxDevices
 	}
-	if entry.MaxDevices > paneldb.MaxDevicesLimit {
-		return paneldb.MaxDevicesLimit
+	if limit := paneldb.ConfiguredMaxDevicesLimit(); entry.MaxDevices > limit {
+		return limit
 	}
 	return entry.MaxDevices
 }

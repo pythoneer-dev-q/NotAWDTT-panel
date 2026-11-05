@@ -505,7 +505,21 @@
         </a-list-item-meta>
         <a-button @click="importDatabase()" type="primary" icon="upload" />
       </a-list-item>
+      <a-list-item class="ant-backup-list-item">
+        <a-list-item-meta>
+          <template #title>Миграция из WDTT</template>
+          <template #description>Добавить пользователей, устройства, лимиты и трафик из другого panel.db с предпросмотром конфликтов.</template>
+        </a-list-item-meta>
+        <a-button @click="previewWDTTMerge()" icon="import">Выбрать файл</a-button>
+      </a-list-item>
     </a-list>
+    <div v-if="backupModal.mergePreview" style="margin-top:16px">
+      <a-alert type="info" show-icon :message="'Можно импортировать: ' + backupModal.mergePreview.importable_users + ' из ' + backupModal.mergePreview.source_users" />
+      <div v-if="backupModal.mergePreview.conflicts.length" style="max-height:180px;overflow:auto;margin:12px 0">
+        <p v-for="item in backupModal.mergePreview.conflicts" :key="item.user" style="margin:4px 0">[[ item.user ]]: [[ item.reason ]]</p>
+      </div>
+      <a-button type="primary" :loading="backupModal.mergeLoading" :disabled="!backupModal.mergePreview.importable_users" @click="applyWDTTMerge()">Импортировать доступных</a-button>
+    </div>
   </a-modal>
   <!-- CPU History Modal -->
   <a-modal id="cpu-history-modal" v-model="cpuHistoryModal.visible" :closable="true"
@@ -1005,6 +1019,9 @@
     };
   const backupModal = {
     visible: false,
+    mergeFile: null,
+    mergePreview: null,
+    mergeLoading: false,
     show() {
       this.visible = true;
     },
@@ -1559,6 +1576,53 @@
           }
         });
         fileInput.click();
+      },
+      previewWDTTMerge() {
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.db';
+        fileInput.addEventListener('change', async () => {
+          const dbFile = fileInput.files[0];
+          if (!dbFile) return;
+          this.backupModal.mergeFile = dbFile;
+          this.backupModal.mergePreview = null;
+          this.backupModal.mergeLoading = true;
+          try {
+            const formData = new FormData();
+            formData.append('file', dbFile);
+            const response = await HttpUtil.post('/panel/api/server/mergeWDTT', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            if (response.success) this.backupModal.mergePreview = response.obj;
+          } finally {
+            this.backupModal.mergeLoading = false;
+          }
+        });
+        fileInput.click();
+      },
+      async applyWDTTMerge() {
+        const preview = this.backupModal.mergePreview;
+        if (!preview || !this.backupModal.mergeFile) return;
+        this.backupModal.mergeLoading = true;
+        try {
+          const formData = new FormData();
+          formData.append('file', this.backupModal.mergeFile);
+          formData.append('apply', 'true');
+          formData.append('source_sha256', preview.source_sha256);
+          formData.append('plan_sha256', preview.plan_sha256);
+          formData.append('target_revision', String(preview.target_revision));
+          const response = await HttpUtil.post('/panel/api/server/mergeWDTT', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          if (response.success) {
+            this.backupModal.mergeFile = null;
+            this.backupModal.mergePreview = null;
+            this.backupModal.visible = false;
+            location.reload();
+          }
+        } finally {
+          this.backupModal.mergeLoading = false;
+        }
       },
       startPolling() {
         const pollMs = Math.max(5000, Number(this.dashboardPollMs) || 5000);

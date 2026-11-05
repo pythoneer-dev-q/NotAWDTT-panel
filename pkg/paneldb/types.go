@@ -47,12 +47,13 @@ type Device struct {
 
 // NodeUserPresence is activity, traffic and device bindings reported by a VPS node.
 type NodeUserPresence struct {
-	Password   string   `json:"password"`
-	DeviceIDs  []string `json:"device_ids"`
-	LastSeenAt int64    `json:"last_seen_at"`
-	Online     bool     `json:"online"`
-	UpBytes    int64    `json:"up_bytes"`
-	DownBytes  int64    `json:"down_bytes"`
+	Password    string            `json:"password"`
+	DeviceIDs   []string          `json:"device_ids"`
+	DeviceNames map[string]string `json:"device_names,omitempty"`
+	LastSeenAt  int64             `json:"last_seen_at"`
+	Online      bool              `json:"online"`
+	UpBytes     int64             `json:"up_bytes"`
+	DownBytes   int64             `json:"down_bytes"`
 }
 
 // SaveOptions — поведение SaveStore.

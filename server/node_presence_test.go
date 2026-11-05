@@ -7,7 +7,7 @@ func TestNodePresenceReportsBindingsAndNewActivity(t *testing.T) {
 	previousDB := db
 	db = &Database{Passwords: map[string]*PasswordEntry{
 		"user": {DeviceIDs: []string{"phone"}, MaxDevices: 2, LastSeenAt: 100, UpBytes: 10, DownBytes: 20},
-	}}
+	}, Devices: map[string]*ClientDevice{"phone": {DeviceID: "phone", ReportedName: "Pixel 8"}}}
 	defer func() {
 		db = previousDB
 		dbMutex.Unlock()
@@ -17,7 +17,7 @@ func TestNodePresenceReportsBindingsAndNewActivity(t *testing.T) {
 	users, states := pendingNodeUserPresenceLocked(reported, map[string]bool{"user": true}, 500)
 	if len(users) != 1 || users[0].Password != "user" || users[0].LastSeenAt != 100 ||
 		len(users[0].DeviceIDs) != 1 || users[0].DeviceIDs[0] != "phone" || !users[0].Online ||
-		users[0].UpBytes != 10 || users[0].DownBytes != 20 {
+		users[0].UpBytes != 10 || users[0].DownBytes != 20 || users[0].DeviceNames["phone"] != "Pixel 8" {
 		t.Fatalf("node omitted bound device or last activity: %#v", users)
 	}
 	// Failed heartbeats leave the report pending; successful ones are acknowledged.
@@ -32,6 +32,12 @@ func TestNodePresenceReportsBindingsAndNewActivity(t *testing.T) {
 	}
 	if pending, _ := pendingNodeUserPresenceLocked(reported, nil, 500); len(pending) != 0 {
 		t.Fatal("unchanged offline presence was sent again")
+	}
+	db.Devices["phone"].ReportedName = "Pixel 9"
+	if pending, next := pendingNodeUserPresenceLocked(reported, nil, 500); len(pending) != 1 || pending[0].DeviceNames["phone"] != "Pixel 9" {
+		t.Fatal("device rename did not trigger a heartbeat update")
+	} else {
+		reported["user"] = next["user"]
 	}
 	db.Passwords["user"].LastSeenAt = 101
 	db.Passwords["user"].UpBytes = 15

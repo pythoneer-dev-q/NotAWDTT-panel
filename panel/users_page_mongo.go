@@ -166,6 +166,12 @@ func (a *App) handleMongoUsersPage(w http.ResponseWriter, r *http.Request, m *pa
 		jsonError(w, fmt.Sprintf("users page: %v", err), http.StatusServiceUnavailable)
 		return
 	}
+	deviceNames := deviceNamesForPage(db.Passwords)
+	for _, row := range rows {
+		if pass, ok := row["password_key"].(string); ok {
+			row["device_names"] = deviceNamesForEntry(db.Passwords[pass], deviceNames)
+		}
+	}
 	nodes, err := m.ListNodes(ctx)
 	if err != nil {
 		jsonError(w, "nodes: "+err.Error(), http.StatusServiceUnavailable)

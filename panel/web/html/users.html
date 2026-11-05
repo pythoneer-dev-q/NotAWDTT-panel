@@ -83,7 +83,12 @@
                       <div><span class="user-mobile-label">VK_HASH</span><code v-if="row.vk_hash">[[ formatVkHashCell(row.vk_hash) ]]</code><span v-else class="text-muted">—</span></div>
                       <div><span class="user-mobile-label">Устройства</span>
                         <span v-if="row.is_main">[[ row.device_id || '—' ]] <span v-if="row.devices_bound" class="text-muted">([[ row.devices_bound ]])</span></span>
-                        <span v-else>[[ row.devices_bound || 0 ]] / [[ row.max_devices || 1 ]] устр.<small v-if="row.device_id" class="text-muted" style="display:block;word-break:break-all">[[ row.device_id ]]</small></span>
+                        <span v-else>[[ row.devices_bound || 0 ]] / [[ row.max_devices || 1 ]] устр.
+                          <small v-for="id in row.device_ids" :key="id" class="text-muted" style="display:block;word-break:break-all">
+                            [[ (row.device_names && row.device_names[id]) || id ]]
+                            <a-button size="small" type="link" icon="edit" @click="openDeviceNameModal(row, id)"></a-button>
+                          </small>
+                        </span>
                       </div>
                       <div><span class="user-mobile-label">Срок</span>[[ row.expires || 'бессрочно' ]]</div>
                       <div class="user-mobile-span2"><span class="user-mobile-label">Трафик</span>
@@ -121,7 +126,10 @@
                     </span>
                     <span v-else>
                       <a-tag color="blue">[[ row.devices_bound || 0 ]] / [[ row.max_devices || 1 ]] устр.</a-tag>
-                      <div v-if="row.device_id" class="text-muted" style="font-size:11px;margin-top:2px">[[ row.device_id ]]</div>
+                      <div v-for="id in row.device_ids" :key="id" class="text-muted" style="font-size:11px;margin-top:2px">
+                        [[ (row.device_names && row.device_names[id]) || id ]]
+                        <a-button size="small" type="link" icon="edit" @click="openDeviceNameModal(row, id)"></a-button>
+                      </div>
                     </span>
                   </span>
                   <span slot="expires" slot-scope="_, row">
@@ -191,6 +199,11 @@
       </a-spin>
     </a-layout-content>
   </a-layout>
+  <a-modal v-model="deviceNameModal.visible" title="Название устройства" @ok="saveDeviceName" :confirm-loading="deviceNameModal.saving">
+    <p class="text-muted" style="word-break:break-all">[[ deviceNameModal.deviceId ]]</p>
+    <a-input v-model="deviceNameModal.name" maxlength="80" placeholder="Например, Samsung Galaxy" />
+    <p class="text-muted" style="margin-top:8px">Оставьте поле пустым, чтобы показывать имя, переданное клиентом.</p>
+  </a-modal>
 </a-layout>
 
 <style>
@@ -301,6 +314,7 @@
       statusFilter: 'all',
       apiModalVisible: false,
       apiKey: '',
+      deviceNameModal: { visible: false, saving: false, deviceId: '', name: '', row: null },
       userCols: [
         { title: 'Пароль', dataIndex: 'password', scopedSlots: { customRender: 'password' } },
         { title: 'Комментарий', dataIndex: 'comment', scopedSlots: { customRender: 'comment' } },
@@ -365,6 +379,22 @@
       if (this.isRefreshEnabled) this.startDataRefreshLoop();
     },
     methods: {
+      openDeviceNameModal(row, deviceId) {
+        this.deviceNameModal = { visible: true, saving: false, deviceId,
+          name: (row.device_names && row.device_names[deviceId]) || '', row };
+      },
+      async saveDeviceName() {
+        const modal = this.deviceNameModal;
+        modal.saving = true;
+        try {
+          const msg = await HttpUtil.post('/panel/api/device-name', { device_id: modal.deviceId, name: modal.name });
+          if (msg && msg.success) {
+            modal.visible = false;
+            this.$message.success('Название сохранено');
+            await this.loadUsers({ withSpinner: false });
+          } else this.$message.error((msg && msg.msg) || 'Не удалось сохранить название');
+        } finally { modal.saving = false; }
+      },
       rowKey(row) {
         return row.is_main ? '__main__' : (row.password_key || row.password);
       },

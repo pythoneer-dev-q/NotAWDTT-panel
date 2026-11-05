@@ -1,5 +1,52 @@
 /* WDTT console: compact graphite surfaces and orange status accents. */
 :root { --wdtt-accent:#f46b17; --wdtt-accent-hover:#ff812f; --wdtt-accent-rgb:244,107,23; --wdtt-accent-soft:rgba(244,107,23,.12); --wdtt-radius:18px; }
+/* Keep typography and card geometry consistent across the console pages. */
+#app:not(.login-app):not(.subscription-page) {
+  font-family:Inter,'Segoe UI Variable','Segoe UI',system-ui,sans-serif;
+  font-feature-settings:'tnum' 1;
+}
+#app:not(.login-app):not(.subscription-page) h1,
+#app:not(.login-app):not(.subscription-page) h2,
+#app:not(.login-app):not(.subscription-page) h3,
+#app:not(.login-app):not(.subscription-page) .ant-card-head-title {
+  letter-spacing:-.035em;
+  font-weight:700;
+}
+#app:not(.login-app):not(.subscription-page) .ant-card,
+#app:not(.login-app):not(.subscription-page) .node-row,
+#app:not(.login-app):not(.subscription-page) .resource-card,
+#app:not(.login-app):not(.subscription-page) .resource-chart,
+#app:not(.login-app):not(.subscription-page) .data-section,
+#app:not(.login-app):not(.subscription-page) .data-stat,
+#app:not(.login-app):not(.subscription-page) .data-node {
+  border-radius:var(--wdtt-radius) !important;
+}
+#app:not(.login-app):not(.subscription-page) .ant-card,
+#app:not(.login-app):not(.subscription-page) .resource-card,
+#app:not(.login-app):not(.subscription-page) .data-stat,
+#app:not(.login-app):not(.subscription-page) .data-node {
+  transition:border-color .18s ease,box-shadow .18s ease;
+}
+#app:not(.login-app):not(.subscription-page) .ant-card:hover,
+#app:not(.login-app):not(.subscription-page) .resource-card:hover,
+#app:not(.login-app):not(.subscription-page) .data-stat:hover,
+#app:not(.login-app):not(.subscription-page) .data-node:hover {
+  border-color:rgba(var(--wdtt-accent-rgb),.38) !important;
+}
+#app:not(.login-app):not(.subscription-page) .data-grid strong,
+#app:not(.login-app):not(.subscription-page) .users-summary strong,
+#app:not(.login-app):not(.subscription-page) .resource-card .value,
+#app:not(.login-app):not(.subscription-page) .node-stat-card strong {
+  font-family:'JetBrains Mono','Cascadia Code',Consolas,monospace;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-.055em;
+}
+#app.data-page .data-grid > .ant-card,
+#app.data-page .data-node-grid > .ant-card {
+  min-width:0;
+  height:100%;
+  border-radius:var(--wdtt-radius) !important;
+}
 .wdtt-mobile-topbar { display:none; }
 #app:not(.login-app):not(.subscription-page) .resource-card, #app:not(.login-app):not(.subscription-page) .node-stat-card, #app:not(.login-app):not(.subscription-page) .user-mobile-card, #app:not(.login-app):not(.subscription-page) .node-row { border-radius:var(--wdtt-radius); }
 #app:not(.login-app):not(.subscription-page) .ant-btn, #app:not(.login-app):not(.subscription-page) .ant-input, #app:not(.login-app):not(.subscription-page) .ant-select-selection { border-radius:10px; }

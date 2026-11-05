@@ -310,6 +310,8 @@ func (a *App) handleServerAPI(w http.ResponseWriter, r *http.Request) {
 		a.handleXrayLogs(w, r)
 	case "importDB":
 		a.handleImportDB(w, r)
+	case "mergeWDTT":
+		a.handleWDTTMerge(w, r)
 	default:
 		jsonError(w, "API endpoint not found", http.StatusNotFound)
 	}

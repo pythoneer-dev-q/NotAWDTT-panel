@@ -42,6 +42,10 @@
       <a-switch v-model="inboundForm.wg_enable"></a-switch>
       <span style="margin-left:10px">Нужен клиентам GETCONF; выключение оставит только RAW.</span>
     </a-form-item>
+    <a-form-item label="RAW для других клиентов">
+      <a-switch v-model="inboundForm.raw_enable"></a-switch>
+      <span style="margin-left:10px">При включении доступны RAW-сессии через DTLS и прямой UDP-порт.</span>
+    </a-form-item>
     <a-form-item>
       <template slot="label">
         <a-tooltip title="UDP порт прямого RAW-подключения (WRAP AEAD, максимальная производительность)">

@@ -93,6 +93,8 @@ func Run() error {
 	mux.HandleFunc(api+"status", app.requireAuthCSRF(app.handleStatus))
 	mux.HandleFunc(api+"dashboard-data", app.requireAuthCSRF(app.handleDashboardData))
 	mux.HandleFunc(api+"rest-credentials", app.requireAuthCSRF(app.handleRestCredentials))
+	mux.HandleFunc(api+"telegram-bot", app.requireAuthCSRF(app.handleTelegramBotSettings))
+	mux.HandleFunc(api+"device-name", app.requireAuthCSRF(app.handleDeviceName))
 	mux.HandleFunc(api+"inbound", app.requireAuthCSRF(app.handleInboundGet))
 	mux.HandleFunc(api+"inbound/save", app.requireAuthCSRF(app.handleInboundSave))
 	mux.HandleFunc(api+"firewall/ports", app.requireAuthCSRF(app.handleFirewallPortsList))

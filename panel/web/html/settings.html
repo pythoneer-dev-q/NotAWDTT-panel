@@ -87,6 +87,32 @@
                     </div>
                   </a-card>
                 </a-tab-pane>
+                <a-tab-pane key="6" :style="{ paddingTop: '20px' }">
+                  <template #tab><a-icon type="message"></a-icon><span>Telegram-бот</span></template>
+                  <a-card title="Управление ботом" class="wdtt-appearance-card">
+                    <a-alert v-if="telegramBot.status" :type="telegramBot.status.running ? 'success' : 'warning'" show-icon
+                      :message="telegramBot.status.running ? 'Бот запущен' : 'Бот остановлен'"
+                      :description="telegramBot.status.last_error || ''" style="margin-bottom:16px"></a-alert>
+                    <a-form layout="vertical">
+                      <a-form-item label="Токен BotFather">
+                        <a-input-password v-model="telegramBot.token" :placeholder="telegramBot.token_present ? 'Токен сохранён; оставьте пустым для сохранения' : 'Введите токен'"></a-input-password>
+                      </a-form-item>
+                      <a-form-item label="Telegram ID администраторов (через запятую)">
+                        <a-input v-model="telegramBot.admin_ids" placeholder="123456789, 987654321"></a-input>
+                      </a-form-item>
+                      <a-row :gutter="16">
+                        <a-col :xs="24" :md="8"><a-form-item label="Срок по умолчанию, дней"><a-input-number v-model="telegramBot.default_days" :min="0" :max="3650" style="width:100%" /></a-form-item></a-col>
+                        <a-col :xs="24" :md="8"><a-form-item label="Трафик по умолчанию, ГБ"><a-input-number v-model="telegramBot.default_traffic_gb" :min="0" :max="100000" style="width:100%" /></a-form-item></a-col>
+                        <a-col :xs="24" :md="8"><a-form-item label="Устройств по умолчанию"><a-input-number v-model="telegramBot.default_devices" :min="1" :max="20" style="width:100%" /></a-form-item></a-col>
+                      </a-row>
+                      <a-form-item><a-checkbox v-model="telegramBot.public">Разрешить пользователям личные команды</a-checkbox></a-form-item>
+                      <a-space>
+                        <a-button type="primary" :loading="telegramBot.saving" @click="saveTelegramBot(true)">Сохранить и запустить</a-button>
+                        <a-button :loading="telegramBot.saving" @click="saveTelegramBot(false)">Остановить</a-button>
+                      </a-space>
+                    </a-form>
+                  </a-card>
+                </a-tab-pane>
               </a-tabs>
             </a-col>
           </a-row>
@@ -289,6 +315,9 @@
         sessionsLoading: false,
         sessionsPoll: null,
       },
+      telegramBot: { token: '', token_present: false, admin_ids: '', default_days: 30,
+        default_traffic_gb: 100, default_devices: 2, public: true, enabled: false,
+        status: null, saving: false },
       lang: LanguageManager.getLanguage(),
       remarkModels: { i: 'Inbound', e: 'Email', o: 'Other' },
       remarkSeparators: [' ', '-', '_', '@', ':', '~', '|', ',', '.', '/'],
@@ -358,6 +387,22 @@
           this.vkCreatorLoaded = true;
           await this.loadVkCreator();
         }
+        if (String(key) === '6') await this.loadTelegramBot();
+      },
+      async loadTelegramBot() {
+        const msg = await HttpUtil.get('/panel/api/telegram-bot');
+        if (msg && msg.success) this.telegramBot = Object.assign({}, this.telegramBot, msg.obj, { token: '', saving: false });
+      },
+      async saveTelegramBot(enabled) {
+        this.telegramBot.saving = true;
+        try {
+          const payload = Object.assign({}, this.telegramBot, { enabled });
+          const msg = await HttpUtil.post('/panel/api/telegram-bot', payload);
+          if (msg && msg.success) {
+            this.$message.success(enabled ? 'Бот запущен' : 'Бот остановлен');
+            await this.loadTelegramBot();
+          } else this.$message.error((msg && msg.msg) || 'Не удалось сохранить настройки бота');
+        } finally { this.telegramBot.saving = false; }
       },
       async loadSubAppearance() {
         const msg = await HttpUtil.get('/panel/api/sub-appearance');

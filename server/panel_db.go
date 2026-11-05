@@ -122,6 +122,17 @@ func persistDeviceSQLiteLocked(dev *ClientDevice) error {
 	})
 }
 
+func persistReportedDeviceNameSQLiteLocked(deviceID, name string) error {
+	if !serverPanelDBReady() {
+		return nil
+	}
+	sqlDB, err := openServerPanelDB()
+	if err != nil {
+		return err
+	}
+	return paneldb.UpsertReportedDeviceName(sqlDB, deviceID, name)
+}
+
 func persistUserBindingsSQLiteLocked(password string, entry *PasswordEntry) error {
 	if entry == nil {
 		return fmt.Errorf("entry is nil")
@@ -655,7 +666,7 @@ func applyInboundRuntimeSettings(raw inboundRuntimeSettings) {
 	dtlsHandshakeTimeout = 30 * time.Second
 	maxDTLSPerDevice = 0
 	wgMTU = defaultWgMTU
-	rawModeEnabled.Store(true)
+	rawModeEnabled.Store(raw.RawEnable)
 
 	if dns := strings.TrimSpace(raw.DNS); dns != "" {
 		clientDNS = dns

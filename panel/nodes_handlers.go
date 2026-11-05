@@ -22,6 +22,7 @@ import (
 	"strings"
 	texttmpl "text/template"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ildarmaga/wdtt/pkg/paneldb"
 )
@@ -462,6 +463,16 @@ func (a *App) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "user presence update failed", http.StatusInternalServerError)
 		return
 	}
+	if panelDBEnabled() {
+		for _, user := range req.Users {
+			for deviceID, name := range user.DeviceNames {
+				if err := paneldb.UpsertReportedDeviceName(panelDB, deviceID, name); err != nil {
+					jsonError(w, "device name update failed", http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+	}
 	if len(req.Users) > 0 {
 		invalidatePasswordsCache()
 	}
@@ -499,6 +510,21 @@ func validateNodeUserPresence(users []paneldb.NodeUserPresence, now int64) error
 		for _, id := range user.DeviceIDs {
 			if strings.TrimSpace(id) == "" || len(id) > 4096 {
 				return fmt.Errorf("invalid device ID")
+			}
+		}
+		if len(user.DeviceNames) > len(user.DeviceIDs) {
+			return fmt.Errorf("invalid device names")
+		}
+		for id, name := range user.DeviceNames {
+			found := false
+			for _, allowed := range user.DeviceIDs {
+				if id == allowed {
+					found = true
+					break
+				}
+			}
+			if !found || name == "" || len(name) > 240 || !utf8.ValidString(name) {
+				return fmt.Errorf("invalid device name")
 			}
 		}
 	}

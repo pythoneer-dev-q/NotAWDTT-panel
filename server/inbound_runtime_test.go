@@ -84,3 +84,16 @@ func TestApplyInboundRuntimeSettingsDefaults(t *testing.T) {
 		t.Fatalf("wgMTU = %d", wgMTU)
 	}
 }
+
+func TestApplyInboundRuntimeSettingsPreservesRAWControl(t *testing.T) {
+	previous := rawModeEnabled.Load()
+	defer rawModeEnabled.Store(previous)
+	applyInboundRuntimeSettings(paneldb.RuntimeSettings{RawEnable: false})
+	if rawModeEnabled.Load() {
+		t.Fatal("RAW remained enabled after the panel disabled it")
+	}
+	applyInboundRuntimeSettings(paneldb.RuntimeSettings{RawEnable: true})
+	if !rawModeEnabled.Load() {
+		t.Fatal("RAW did not become available for other clients")
+	}
+}

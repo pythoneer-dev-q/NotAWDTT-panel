@@ -111,6 +111,7 @@ func (a *App) handleSQLiteUsersPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	inbound, _ := loadWdttInbound()
+	deviceNames := deviceNamesForPage(db.Passwords)
 	host := a.resolveLinkHost(inbound)
 	subURL := a.pageSubURLBuilder()
 	stats := loadServerStats()
@@ -127,6 +128,7 @@ func (a *App) handleSQLiteUsersPage(w http.ResponseWriter, r *http.Request) {
 		dtls, wg, client := resolveUserPorts(entry, inbound)
 		rows = append(rows, map[string]interface{}{
 			"password": maskPassword(pass), "password_key": pass, "device_id": deviceIDsDisplay(entry), "device_ids": entry.DeviceIDs,
+			"device_names":  deviceNamesForEntry(entry, deviceNames),
 			"devices_bound": len(entry.DeviceIDs), "max_devices": entryMaxDevices(db, pass, entry), "comment": entry.Comment,
 			"expires_at": entry.ExpiresAt, "expires": passwordExpiry(entry), "up": formatBytes(entry.UpBytes), "down": formatBytes(entry.DownBytes),
 			"up_bytes": entry.UpBytes, "down_bytes": entry.DownBytes, "total_bytes": entry.TotalBytes, "total_gb": bytesToGB(entry.TotalBytes),

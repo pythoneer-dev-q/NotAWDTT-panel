@@ -59,16 +59,6 @@ func loadTelegramBotConfig(panelCfg *PanelConfig) (telegramBotConfig, error) {
 		DefaultTrafficGB: envFloat("WDTT_BOT_DEFAULT_TRAFFIC_GB", 100),
 		DefaultDevices:   envInt("WDTT_BOT_DEFAULT_DEVICES", 2),
 	}
-	for _, raw := range strings.FieldsFunc(os.Getenv("WDTT_BOT_ADMIN_IDS"), func(r rune) bool {
-		return r == ',' || r == ';' || r == ' ' || r == '\n' || r == '\t'
-	}) {
-		id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
-		if err != nil || id <= 0 {
-			return cfg, fmt.Errorf("WDTT_BOT_ADMIN_IDS contains invalid Telegram ID %q", raw)
-		}
-		cfg.AdminIDs[id] = struct{}{}
-	}
-
 	panelURL := strings.TrimSpace(os.Getenv("WDTT_BOT_PANEL_URL"))
 	if panelURL == "" {
 		port := 2860
@@ -81,6 +71,30 @@ func loadTelegramBotConfig(panelCfg *PanelConfig) (telegramBotConfig, error) {
 	cfg.APIKey = strings.TrimSpace(os.Getenv("WDTT_BOT_API_KEY"))
 	if cfg.APIKey == "" && panelCfg != nil {
 		cfg.APIKey = strings.TrimSpace(panelCfg.ApiKey)
+	}
+	if saved, ok, err := loadSavedTelegramBotSettings(); err != nil {
+		return cfg, err
+	} else if ok {
+		if err := validateTelegramBotSettings(saved); err != nil {
+			return cfg, err
+		}
+		cfg.Enabled = saved.Enabled
+		cfg.Token = saved.Token
+		cfg.AdminIDs = parseTelegramAdminIDs(saved.AdminIDs)
+		cfg.DefaultDays = saved.DefaultDays
+		cfg.DefaultTrafficGB = saved.DefaultTrafficGB
+		cfg.DefaultDevices = saved.DefaultDevices
+		cfg.Public = saved.Public
+	} else {
+		for _, raw := range strings.FieldsFunc(os.Getenv("WDTT_BOT_ADMIN_IDS"), func(r rune) bool {
+			return r == ',' || r == ';' || r == ' ' || r == '\n' || r == '\t'
+		}) {
+			id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+			if err != nil || id <= 0 {
+				return cfg, fmt.Errorf("WDTT_BOT_ADMIN_IDS contains invalid Telegram ID %q", raw)
+			}
+			cfg.AdminIDs[id] = struct{}{}
+		}
 	}
 
 	if cfg.CopyNodeLimit < 1 {
@@ -454,15 +468,17 @@ type tgReplyMarkup struct {
 }
 
 type telegramBot struct {
-	cfg       telegramBotConfig
-	panel     *botPanelClient
-	http      *http.Client
-	refsMu    sync.RWMutex
-	userRefs  map[string]string
-	startedAt time.Time
+	cfg        telegramBotConfig
+	generation uint64
+	panel      *botPanelClient
+	http       *http.Client
+	refsMu     sync.RWMutex
+	userRefs   map[string]string
+	startedAt  time.Time
 }
 
 func startTelegramBot(panelCfg *PanelConfig) {
+	stopTelegramBot()
 	cfg, err := loadTelegramBotConfig(panelCfg)
 	if err != nil {
 		log.Printf("[BOT] Конфигурация: %v", err)
@@ -482,7 +498,25 @@ func startTelegramBot(panelCfg *PanelConfig) {
 		userRefs:  make(map[string]string),
 		startedAt: time.Now(),
 	}
-	go bot.run(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	telegramRuntime.mu.Lock()
+	telegramRuntime.generation++
+	generation := telegramRuntime.generation
+	bot.generation = generation
+	telegramRuntime.cancel = cancel
+	telegramRuntime.running = true
+	telegramRuntime.startedAt = time.Now()
+	telegramRuntime.lastError = ""
+	telegramRuntime.mu.Unlock()
+	go func() {
+		bot.run(ctx)
+		telegramRuntime.mu.Lock()
+		if telegramRuntime.generation == generation {
+			telegramRuntime.running = false
+			telegramRuntime.cancel = nil
+		}
+		telegramRuntime.mu.Unlock()
+	}()
 }
 
 func rejectBotRedirect(*http.Request, []*http.Request) error {
@@ -513,6 +547,11 @@ func (b *telegramBot) run(ctx context.Context) {
 		}, &updates)
 		if err != nil {
 			log.Printf("[BOT] Telegram polling: %v", err)
+			telegramRuntime.mu.Lock()
+			if telegramRuntime.generation == b.generation {
+				telegramRuntime.lastError = err.Error()
+			}
+			telegramRuntime.mu.Unlock()
 			select {
 			case <-ctx.Done():
 				return
@@ -524,6 +563,11 @@ func (b *telegramBot) run(ctx context.Context) {
 			continue
 		}
 		backoff = time.Second
+		telegramRuntime.mu.Lock()
+		if telegramRuntime.generation == b.generation {
+			telegramRuntime.lastError = ""
+		}
+		telegramRuntime.mu.Unlock()
 		for _, update := range updates {
 			if update.UpdateID >= offset {
 				offset = update.UpdateID + 1

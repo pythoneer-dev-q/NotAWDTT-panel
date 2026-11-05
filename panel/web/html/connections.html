@@ -27,7 +27,7 @@
                         <div class="conn-mobile-tags">
                           <a-tag color="purple">WDTT</a-tag>
                           <a-tag color="blue">UDP [[ row.dtls_port ]]</a-tag>
-                          <a-tag color="orange">RAW [[ row.raw_direct_port || ((Number(row.dtls_port)||56000)+3) ]]</a-tag>
+                        <a-tag :color="row.raw_enable === false ? 'default' : 'orange'">[[ row.raw_enable === false ? 'RAW выключен' : 'RAW ' + (row.raw_direct_port || ((Number(row.dtls_port)||56000)+3)) ]]</a-tag>
                         </div>
                       </div>
                       <a-switch :checked="row.enable !== false" :loading="row.toggling"
@@ -68,7 +68,7 @@
                         <a-tag color="blue" :style="{ margin: 0 }">UDP [[ row.dtls_port ]]</a-tag>
                       </a-tooltip>
                       <a-tooltip title="RAW UDP прямой порт (высокая скорость)">
-                        <a-tag color="orange" :style="{ margin: 0 }">RAW [[ row.raw_direct_port || ((Number(row.dtls_port)||56000)+3) ]]</a-tag>
+                        <a-tag :color="row.raw_enable === false ? 'default' : 'orange'" :style="{ margin: 0 }">[[ row.raw_enable === false ? 'RAW выключен' : 'RAW ' + (row.raw_direct_port || ((Number(row.dtls_port)||56000)+3)) ]]</a-tag>
                       </a-tooltip>
                       
                     </span>
@@ -78,7 +78,7 @@
                       <a-tag color="purple" :style="{ margin: 0 }">WDTT</a-tag>
                       <a-tag color="blue" :style="{ margin: 0 }">UDP</a-tag>
                       <a-tooltip :title="'IP RAW · UDP ' + (row.raw_direct_port || ((Number(row.dtls_port)||56000)+3)) + ' · ' + (row.raw_subnet || '10.70.0.0/16') + (row.raw_sessions ? (' · сессий ' + row.raw_sessions) : '')">
-                        <a-tag color="orange" :style="{ margin: 0 }">RAW[[ row.raw_sessions ? (' · ' + row.raw_sessions) : '' ]]</a-tag>
+                        <a-tag :color="row.raw_enable === false ? 'default' : 'orange'" :style="{ margin: 0 }">[[ row.raw_enable === false ? 'RAW выключен' : 'RAW' + (row.raw_sessions ? (' · ' + row.raw_sessions) : '') ]]</a-tag>
                       </a-tooltip>
                       
                     </span>

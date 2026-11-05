@@ -19,6 +19,7 @@ func TestNodePresenceRejectsInvalidActivity(t *testing.T) {
 		{Password: "user", UpBytes: -1},
 		{Password: "user", DownBytes: 1 << 61},
 		{Password: "", DeviceIDs: []string{"phone"}},
+		{Password: "user", DeviceIDs: []string{"phone"}, DeviceNames: map[string]string{"other": "Pixel"}},
 	} {
 		if err := validateNodeUserPresence([]paneldb.NodeUserPresence{user}, now); err == nil {
 			t.Fatalf("invalid node activity accepted: %#v", user)

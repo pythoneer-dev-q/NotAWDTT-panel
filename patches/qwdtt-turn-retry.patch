@@ -1,0 +1,141 @@
+diff --git a/app/src/main/java/com/wdtt/client/TunnelManager.kt b/app/src/main/java/com/wdtt/client/TunnelManager.kt
+index 7e22816..cd24bd8 100644
+--- a/app/src/main/java/com/wdtt/client/TunnelManager.kt
++++ b/app/src/main/java/com/wdtt/client/TunnelManager.kt
+@@ -258,6 +258,7 @@ object TunnelManager {
+                 // Set LD_LIBRARY_PATH
+                 val env = pb.environment()
+                 env["LD_LIBRARY_PATH"] = context.applicationInfo.nativeLibraryDir
++                env["WDTT_DEVICE_NAME"] = (android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL).trim()
+ 
+                 process = pb.start()
+                 processStartedAtMs = System.currentTimeMillis()
+diff --git a/go_client/group.go b/go_client/group.go
+index 41ca8f7..3447ea0 100644
+--- a/go_client/group.go
++++ b/go_client/group.go
+@@ -157,6 +157,9 @@ func WorkerGroup(
+ 				credsSnapshot := *creds
+ 				credsSnapshot.TurnURLs = cloneStringSlice(creds.TurnURLs)
+ 				credsMu.RUnlock()
++				// A worker keeps its ID across retries. Rotate the candidate list so a
++				// silent relay cannot pin that worker to the same address forever.
++				credsSnapshot.TurnURLs = turnURLsForAttempt(credsSnapshot.TurnURLs, attempt)
+ 
+ 				configDelivered, sessErr := RunSession(ctx, tp, peer, d, localPort,
+ 					getConf, cc, wid, &credsSnapshot, deviceID, password, stats)
+@@ -239,6 +242,19 @@ func WorkerGroup(
+ 	log.Printf("[ГРУППА #%d] Все воркеры группы завершились.", groupID)
+ }
+ 
++func turnURLsForAttempt(urls []string, attempt int) []string {
++	if len(urls) < 2 {
++		return urls
++	}
++	shift := attempt % len(urls)
++	if shift == 0 {
++		return urls
++	}
++	rotated := make([]string, 0, len(urls))
++	rotated = append(rotated, urls[shift:]...)
++	return append(rotated, urls[:shift]...)
++}
++
+ // ParseHashes — парсит строку хешей
+ func ParseHashes(raw string) []string {
+ 	var result []string
+diff --git a/go_client/group_test.go b/go_client/group_test.go
+new file mode 100644
+index 0000000..d543ad7
+--- /dev/null
++++ b/go_client/group_test.go
+@@ -0,0 +1,16 @@
++package main
++
++import "testing"
++
++func TestTurnURLsForAttemptVisitsEveryRelay(t *testing.T) {
++	urls := []string{"first:19302", "second:19302", "third:19302"}
++	for attempt, want := range []string{"first:19302", "second:19302", "third:19302", "first:19302"} {
++		rotated := turnURLsForAttempt(urls, attempt)
++		if got := rotated[0]; got != want {
++			t.Fatalf("attempt %d: first relay = %q, want %q", attempt, got, want)
++		}
++	}
++	if urls[0] != "first:19302" {
++		t.Fatal("rotation mutated credential relay list")
++	}
++}
+diff --git a/go_client/protocol.go b/go_client/protocol.go
+index 4dd6977..348b055 100644
+--- a/go_client/protocol.go
++++ b/go_client/protocol.go
+@@ -3,6 +3,8 @@ package main
+ import (
+ 	"fmt"
+ 	"net"
++	"net/url"
++	"os"
+ 	"strings"
+ 	"time"
+ )
+@@ -10,6 +12,9 @@ import (
+ // RequestConfig запрашивает WireGuard конфиг через DTLS-соединение.
+ func RequestConfig(conn net.Conn, localPort, deviceID, password string) (string, error) {
+ 	payload := fmt.Sprintf("GETCONF:%s|%s|%s", localPort, deviceID, password)
++	if name := strings.TrimSpace(os.Getenv("WDTT_DEVICE_NAME")); name != "" {
++		payload += "|" + url.QueryEscape(name)
++	}
+ 	if _, err := conn.Write([]byte(payload)); err != nil {
+ 		return "", fmt.Errorf("отправка GETCONF: %w", err)
+ 	}
+diff --git a/go_client/protocol_test.go b/go_client/protocol_test.go
+new file mode 100644
+index 0000000..5331cb8
+--- /dev/null
++++ b/go_client/protocol_test.go
+@@ -0,0 +1,29 @@
++package main
++
++import (
++	"net"
++	"strings"
++	"testing"
++)
++
++func TestRequestConfigSendsDeviceName(t *testing.T) {
++	t.Setenv("WDTT_DEVICE_NAME", "Samsung Galaxy S")
++	client, server := net.Pipe()
++	defer client.Close()
++	defer server.Close()
++	payload := make(chan string, 1)
++	go func() {
++		buf := make([]byte, 512)
++		n, err := server.Read(buf)
++		if err == nil {
++			payload <- string(buf[:n])
++			_, _ = server.Write([]byte("NOCONF"))
++		}
++	}()
++	if _, err := RequestConfig(client, "9000", "device", "password"); err != nil {
++		t.Fatal(err)
++	}
++	if got := <-payload; !strings.HasSuffix(got, "|Samsung+Galaxy+S") {
++		t.Fatalf("device name missing from GETCONF: %q", got)
++	}
++}
+diff --git a/go_client/session.go b/go_client/session.go
+index 6470414..c6e6bbb 100644
+--- a/go_client/session.go
++++ b/go_client/session.go
+@@ -288,7 +288,9 @@ func RunSession(
+ 	}
+ 	defer dtlsConn.Close()
+ 
+-	hctx, hcancel := context.WithTimeout(sessCtx, 50*time.Second)
++	// The WDTT node releases unanswered handshakes after 8s. Avoid holding a
++	// worker and one of the three handshake slots for another 42s.
++	hctx, hcancel := context.WithTimeout(sessCtx, 12*time.Second)
+ 	log.Printf("[ВОРКЕР #%d] [DTLS] Рукопожатие (Handshake)...", sessionID)
+ 	err = dtlsConn.HandshakeContext(hctx)
+ 	hcancel()

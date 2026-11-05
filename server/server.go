@@ -89,10 +89,11 @@ var dtlsHandshakeSem = make(chan struct{}, 512)
 // ==================== База данных и Бот ====================
 
 type ClientDevice struct {
-	DeviceID string `json:"device_id"`
-	IP       string `json:"ip"`
-	PrivKey  string `json:"priv_key"`
-	PubKey   string `json:"pub_key"`
+	DeviceID     string `json:"device_id"`
+	ReportedName string `json:"reported_name,omitempty"`
+	IP           string `json:"ip"`
+	PrivKey      string `json:"priv_key"`
+	PubKey       string `json:"pub_key"`
 }
 
 type PasswordEntry struct {
@@ -722,11 +723,12 @@ type NodeSyncUser struct {
 }
 
 type reportedNodePresence struct {
-	lastSeenAt int64
-	deviceIDs  string
-	upBytes    int64
-	downBytes  int64
-	online     bool
+	lastSeenAt  int64
+	deviceIDs   string
+	deviceNames string
+	upBytes     int64
+	downBytes   int64
+	online      bool
 }
 
 // Called with dbMutex held. Changed users and all currently online users are sent.
@@ -766,12 +768,24 @@ func pendingNodeUserPresenceLocked(reported map[string]reportedNodePresence, onl
 			downBytes:  entry.DownBytes,
 			online:     isOnline,
 		}
+		names := make(map[string]string)
+		for _, id := range ids {
+			if device := db.Devices[id]; device != nil && device.ReportedName != "" {
+				names[id] = device.ReportedName
+			}
+		}
+		nameParts := make([]string, 0, len(ids))
+		for _, id := range ids {
+			nameParts = append(nameParts, names[id])
+		}
+		state.deviceNames = strings.Join(nameParts, "\x00")
 		if reported[password] == state && !isOnline {
 			continue
 		}
 		users = append(users, paneldb.NodeUserPresence{
 			Password: password, DeviceIDs: ids, LastSeenAt: entry.LastSeenAt,
-			Online: isOnline, UpBytes: entry.UpBytes, DownBytes: entry.DownBytes,
+			DeviceNames: names,
+			Online:      isOnline, UpBytes: entry.UpBytes, DownBytes: entry.DownBytes,
 		})
 		states[password] = state
 	}

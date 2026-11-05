@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -89,6 +90,7 @@ func handleConn(ctx context.Context, clientConn net.Conn, wgEndpoint string, wgD
 		clientPort := "9000"
 		deviceID := "unknown"
 		password := ""
+		reportedName := ""
 		if len(parts) > 0 {
 			clientPort = parts[0]
 		}
@@ -97,6 +99,11 @@ func handleConn(ctx context.Context, clientConn net.Conn, wgEndpoint string, wgD
 		}
 		if len(parts) > 2 {
 			password = parts[2]
+		}
+		if len(parts) > 3 {
+			if decoded, err := url.QueryUnescape(parts[3]); err == nil {
+				reportedName = cleanReportedDeviceName(decoded)
+			}
 		}
 		if wrapAuthPass != "" {
 			if password == "" {
@@ -194,6 +201,12 @@ func handleConn(ctx context.Context, clientConn net.Conn, wgEndpoint string, wgD
 				}
 			}
 			if dev != nil {
+				if reportedName != "" && dev.ReportedName != reportedName {
+					dev.ReportedName = reportedName
+					if err := persistReportedDeviceNameSQLiteLocked(deviceID, reportedName); err != nil {
+						log.Printf("[DB] device name save: %v", err)
+					}
+				}
 				connDeviceID = deviceID
 				connUserIP = dev.IP
 				upsertPeerInWG(wgDev, dev)
@@ -471,4 +484,19 @@ func handleConn(ctx context.Context, clientConn net.Conn, wgEndpoint string, wgD
 	}()
 
 	proxyWg.Wait()
+}
+
+func cleanReportedDeviceName(value string) string {
+	value = strings.TrimSpace(value)
+	var out []rune
+	for _, r := range value {
+		if r < 32 || r == 127 || r == '|' {
+			continue
+		}
+		out = append(out, r)
+		if len(out) == 80 {
+			break
+		}
+	}
+	return strings.TrimSpace(string(out))
 }

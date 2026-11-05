@@ -595,6 +595,18 @@ func (m *MongoDB) UpsertUser(ctx context.Context, pass string, u *User) error {
 	return err
 }
 
+func (m *MongoDB) UpsertDevice(ctx context.Context, device *Device) error {
+	if device == nil || device.DeviceID == "" {
+		return fmt.Errorf("invalid device")
+	}
+	_, err := m.db.Collection("devices").UpdateOne(ctx,
+		bson.M{"_id": device.DeviceID},
+		bson.M{"$set": bson.M{"ip": device.IP, "priv_key": device.PrivKey, "pub_key": device.PubKey}},
+		options.UpdateOne().SetUpsert(true),
+	)
+	return err
+}
+
 func (m *MongoDB) DeleteUser(ctx context.Context, pass string) error {
 	_, err := m.db.Collection("users").DeleteOne(ctx, bson.M{"_id": pass})
 	return err

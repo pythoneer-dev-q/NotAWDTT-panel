@@ -40,7 +40,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [unified]
+    needs: [tests, unified]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +51,11 @@ jobs:
           pattern: wdtt-linux-*
           merge-multiple: true
           path: dist
+      - name: Checksums and standalone node updater
+        run: |
+          cp panel/node-cli.sh dist/wdtt-node
+          cd dist
+          sha256sum wdtt-linux-amd64 wdtt-linux-arm64 wdtt-node > SHA256SUMS
       - name: Fetch PWDTT Client from GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -89,5 +94,7 @@ jobs:
           files: |
             dist/wdtt-linux-*
             dist/pwdtt-client-*
+            dist/wdtt-node
+            dist/SHA256SUMS
           body_path: release-notes.md
           generate_release_notes: false
